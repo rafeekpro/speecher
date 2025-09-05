@@ -1,0 +1,198 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ping: 1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov pytest-asyncio
+        pip install fastapi uvicorn pymongo mongomock
+        pip install boto3 azure-storage-blob google-cloud-speech
+        pip install requests pandas streamlit
+    
+    - name: Run unit tests
+      env:
+        MONGODB_URI: mongodb://localhost:27017
+        S3_BUCKET_NAME: test-bucket
+        AZURE_STORAGE_ACCOUNT: test-account
+        GCP_PROJECT_ID: test-project
+      run: |
+        pytest tests/test_api.py -v --cov=src/backend --cov-report=xml
+    
+    - name: Run integration tests
+      env:
+        MONGODB_URI: mongodb://localhost:27017
+      run: |
+        pytest tests/test_integration.py -v
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install linting tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort mypy
+    
+    - name: Run Black
+      run: black --check src/ tests/
+      continue-on-error: true
+    
+    - name: Run isort
+      run: isort --check-only src/ tests/
+      continue-on-error: true
+    
+    - name: Run Flake8
+      run: flake8 src/ tests/ --max-line-length=120 --ignore=E203,W503
+      continue-on-error: true
+    
+    - name: Run MyPy
+      run: mypy src/ --ignore-missing-imports
+      continue-on-error: true
+
+  docker:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: Build Backend Image
+      run: |
+        docker build -t speecher-backend:test .
+    
+    - name: Build Frontend Image
+      run: |
+        docker build -t speecher-frontend:test ./src/frontend
+    
+    - name: Test Docker Compose
+      run: |
+        docker-compose config
+        docker-compose up -d
+        sleep 10
+        docker-compose ps
+        curl -f http://localhost:8000/health || exit 1
+        docker-compose down
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install security tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety bandit
+    
+    - name: Run Safety check
+      run: safety check --json
+      continue-on-error: true
+    
+    - name: Run Bandit
+      run: bandit -r src/ -f json -o bandit-report.json
+      continue-on-error: true
+    
+    - name: Upload security reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+        retention-days: 30
+
+  deploy:
+    name: Deploy to Production
+    needs: [test, lint, docker, security]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Deploy notification
+      run: |
+        echo "Ready for deployment!"
+        echo "This is where you would deploy to production"
+        echo "Add your deployment steps here (AWS, Azure, GCP, etc.)"
+    
+    # Uncomment and configure for actual deployment
+    # - name: Deploy to AWS
+    #   env:
+    #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    #   run: |
+    #     # Your deployment commands here
+    
+    # - name: Deploy to Docker Hub
+    #   env:
+    #     DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+    #     DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+    #   run: |
+    #     echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+    #     docker build -t $DOCKER_USERNAME/speecher-backend:latest .
+    #     docker push $DOCKER_USERNAME/speecher-backend:latest

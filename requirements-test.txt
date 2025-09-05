@@ -1,0 +1,28 @@
+# Testing dependencies
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-asyncio==0.21.1
+pytest-mock==3.12.0
+mongomock==4.1.2
+
+# API dependencies for testing
+fastapi==0.104.1
+uvicorn==0.24.0
+httpx==0.25.1
+python-multipart==0.0.6
+
+# Cloud service mocks
+moto==4.2.9  # AWS services mock
+responses==0.24.1  # HTTP mocking
+
+# Code quality
+black==23.11.0
+isort==5.12.0
+flake8==6.1.0
+mypy==1.7.0
+safety==3.0.1
+bandit==1.7.5
+
+# Coverage
+coverage==7.3.2
+codecov==2.1.13
