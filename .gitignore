@@ -79,3 +79,9 @@ output/
 *.transcript.txt
 *.srt
 *.vtt
+
+# Test files and temporary outputs
+plik*.txt
+test_output*.txt
+*_output.txt
+temp_*.txt
