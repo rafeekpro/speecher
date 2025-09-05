@@ -11,7 +11,13 @@ dependencies = [
     "boto3>=1.28.0",
     "requests>=2.31.0",
     "awscli (>=1.40.9,<2.0.0)",
-    "pydub (>=0.25.1,<0.26.0)"
+    "pydub (>=0.25.1,<0.26.0)",
+    "azure-storage-blob (>=12.25.1,<13.0.0)",
+    "azure-cognitiveservices-speech (>=1.43.0,<2.0.0)",
+    "pytest (>=8.3.5,<9.0.0)",
+    "uvicorn>=0.34.2",
+    "fastapi>=0.115.12",
+    "pymongo>=4.13.0",
 ]
 
 [tool.poetry]

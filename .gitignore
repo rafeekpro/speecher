@@ -1,3 +1,15 @@
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Credentials
+gcp-credentials.json
+aws-credentials.json
+azure-credentials.json
+*.pem
+*.key
+
 # Python
 __pycache__/
 *.py[cod]
@@ -21,47 +33,49 @@ wheels/
 *.egg
 MANIFEST
 
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
 # Poetry
 poetry.lock
 
-# Virtual Environment
-venv/
-env/
-ENV/
-.env
-.venv
-env.bak/
-venv.bak/
-
-# Distribution / packaging
-.Python
-*.manifest
-*.spec
-
-# PyInstaller
-*.manifest
-*.spec
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pytest
+# Testing
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
+.hypothesis/
+test_output*.txt
+test_results/
 
-# IDE / editors
-.idea/
+# IDE
 .vscode/
+.idea/
 *.swp
 *.swo
 *~
-
-# Logs
-*.log
-
-# Audio files
-*.wav
-
-# macOS
 .DS_Store
+
+# Docker
+*.log
+docker-compose.override.yml
+
+# MongoDB data
+mongo-data/
+
+# Audio files (for privacy)
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.ogg
+
+# Transcription outputs
+transcripts/
+output/
+*.transcript.txt
+*.srt
+*.vtt

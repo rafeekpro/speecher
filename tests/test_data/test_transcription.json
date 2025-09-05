@@ -1,0 +1,81 @@
+{
+  "results": {
+    "transcripts": [
+      {
+        "transcript": "To jest przyk\u0142adowa transkrypcja."
+      }
+    ],
+    "speaker_labels": {
+      "speakers": 2,
+      "segments": [
+        {
+          "speaker_label": "spk_0",
+          "start_time": "0.0",
+          "end_time": "2.5",
+          "items": []
+        },
+        {
+          "speaker_label": "spk_1",
+          "start_time": "2.6",
+          "end_time": "5.0",
+          "items": []
+        }
+      ]
+    },
+    "items": [
+      {
+        "start_time": "0.0",
+        "end_time": "0.5",
+        "alternatives": [
+          {
+            "content": "To",
+            "confidence": "0.99"
+          }
+        ],
+        "type": "pronunciation"
+      },
+      {
+        "start_time": "0.6",
+        "end_time": "0.9",
+        "alternatives": [
+          {
+            "content": "jest",
+            "confidence": "0.99"
+          }
+        ],
+        "type": "pronunciation"
+      },
+      {
+        "start_time": "1.0",
+        "end_time": "2.0",
+        "alternatives": [
+          {
+            "content": "przyk\u0142adowa",
+            "confidence": "0.98"
+          }
+        ],
+        "type": "pronunciation"
+      },
+      {
+        "start_time": "2.6",
+        "end_time": "5.0",
+        "alternatives": [
+          {
+            "content": "transkrypcja",
+            "confidence": "0.97"
+          }
+        ],
+        "type": "pronunciation"
+      },
+      {
+        "alternatives": [
+          {
+            "content": ".",
+            "confidence": "0.99"
+          }
+        ],
+        "type": "punctuation"
+      }
+    ]
+  }
+}

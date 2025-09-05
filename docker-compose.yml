@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  mongo:
+    image: mongo:6.0
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USERNAME:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-password}
+      - MONGO_INITDB_DATABASE=speecher
+    volumes:
+      - mongo-data:/data/db
+    networks:
+      - speecher-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      # MongoDB configuration
+      - MONGODB_URI=mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password}@mongo:27017/speecher?authSource=admin
+      - MONGODB_DB=${MONGODB_DB:-speecher}
+      - MONGODB_COLLECTION=${MONGODB_COLLECTION:-transcriptions}
+      
+      # AWS configuration
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-speecher-transcriptions}
+      
+      # Azure configuration
+      - AZURE_STORAGE_ACCOUNT=${AZURE_STORAGE_ACCOUNT}
+      - AZURE_STORAGE_KEY=${AZURE_STORAGE_KEY}
+      - AZURE_CONTAINER_NAME=${AZURE_CONTAINER_NAME:-speecher}
+      - AZURE_SPEECH_KEY=${AZURE_SPEECH_KEY}
+      - AZURE_SPEECH_REGION=${AZURE_SPEECH_REGION:-eastus}
+      
+      # GCP configuration
+      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
+      - GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-speecher-gcp}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-credentials.json
+      
+    volumes:
+      - ./src:/app/src:ro
+      - ${GCP_CREDENTIALS_FILE:-./gcp-credentials.json}:/app/gcp-credentials.json:ro
+    depends_on:
+      - mongo
+    networks:
+      - speecher-network
+
+  frontend:
+    build:
+      context: ./src/frontend
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - STREAMLIT_THEME_PRIMARY_COLOR=${THEME_PRIMARY_COLOR:-#FF4B4B}
+      - STREAMLIT_THEME_BACKGROUND_COLOR=${THEME_BACKGROUND_COLOR:-#FFFFFF}
+      - STREAMLIT_THEME_SECONDARY_BACKGROUND_COLOR=${THEME_SECONDARY_BACKGROUND_COLOR:-#F0F2F6}
+      - STREAMLIT_THEME_TEXT_COLOR=${THEME_TEXT_COLOR:-#262730}
+    depends_on:
+      - backend
+    networks:
+      - speecher-network
+
+volumes:
+  mongo-data:
+    driver: local
+
+networks:
+  speecher-network:
+    driver: bridge
