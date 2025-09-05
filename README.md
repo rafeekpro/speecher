@@ -1,109 +1,109 @@
-# 🎙️ Speecher - Zaawansowane narzędzie transkrypcji audio
+# 🎙️ Speecher - Advanced Audio Transcription Tool
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Speecher to profesjonalne narzędzie do transkrypcji plików audio z automatycznym rozpoznawaniem mówców, obsługujące wielu dostawców chmury (AWS, Azure, Google Cloud). Dostępne jako aplikacja CLI, REST API oraz interfejs webowy.
+Speecher is a professional audio transcription tool with automatic speaker recognition, supporting multiple cloud providers (AWS, Azure, Google Cloud). Available as CLI application, REST API, and web interface.
 
-## ✨ Główne funkcje
+## ✨ Key Features
 
-- 🌐 **Multi-cloud** - obsługa AWS Transcribe, Azure Speech i Google Speech-to-Text
-- 🗣️ **Diaryzacja mówców** - automatyczne rozpoznawanie do 10 różnych osób
-- 🌍 **11 języków** - polski, angielski, niemiecki, hiszpański, francuski i więcej
-- ⏱️ **Znaczniki czasu** - dokładne czasy wypowiedzi każdego mówcy
-- 💰 **Szacowanie kosztów** - kalkulacja przed rozpoczęciem transkrypcji
-- 📊 **Wiele formatów** - eksport do TXT, SRT, JSON, VTT, PDF
-- 🐳 **Docker ready** - pełna konteneryzacja z docker-compose
-- 📝 **Historia transkrypcji** - MongoDB do przechowywania wyników
+- 🌐 **Multi-cloud** - supports AWS Transcribe, Azure Speech, and Google Speech-to-Text
+- 🗣️ **Speaker diarization** - automatic recognition of up to 10 different speakers
+- 🌍 **11 languages** - Polish, English, German, Spanish, French, and more
+- ⏱️ **Timestamps** - precise timing for each speaker's utterances
+- 💰 **Cost estimation** - calculation before starting transcription
+- 📊 **Multiple formats** - export to TXT, SRT, JSON, VTT, PDF
+- 🐳 **Docker ready** - full containerization with docker-compose
+- 📝 **Transcription history** - MongoDB for storing results
 
-## 🚀 Szybki start (Docker)
+## 🚀 Quick Start (Docker)
 
-### 1. Klonowanie repozytorium
+### 1. Clone Repository
 ```bash
 git clone https://github.com/yourusername/speecher.git
 cd speecher
 ```
 
-### 2. Konfiguracja
+### 2. Configuration
 ```bash
 cp .env.example .env
-# Edytuj .env i dodaj klucze API dla wybranych dostawców
+# Edit .env and add API keys for selected providers
 ```
 
-### 3. Uruchomienie
+### 3. Launch
 ```bash
 docker-compose up --build
 ```
 
-### 4. Dostęp do aplikacji
+### 4. Access Application
 - **Frontend**: http://localhost:8501
 - **API**: http://localhost:8000
-- **Dokumentacja API**: http://localhost:8000/docs
+- **API Documentation**: http://localhost:8000/docs
 
-## 💻 Instalacja lokalna (CLI)
+## 💻 Local Installation (CLI)
 
-### Wymagania
+### Requirements
 - Python 3.11+
-- Poetry lub pip
-- Konto w AWS/Azure/GCP (przynajmniej jedno)
+- Poetry or pip
+- Account with AWS/Azure/GCP (at least one)
 
-### Instalacja
+### Installation
 ```bash
-# Z Poetry
+# With Poetry
 poetry install
 
-# Lub z pip
+# Or with pip
 pip install -r requirements.txt
 ```
 
-### Użycie CLI
+### CLI Usage
 ```bash
-# Podstawowa transkrypcja
+# Basic transcription
 python -m speecher.cli --audio-file audio.wav --language pl-PL
 
-# Z zapisem do pliku
+# With file output
 python -m speecher.cli --audio-file audio.wav --output-file transcript.txt
 
-# Z szacowaniem kosztów
+# With cost estimation
 python -m speecher.cli --audio-file audio.wav --show-cost
 
-# Z diaryzacją mówców (max 4 osoby)
+# With speaker diarization (max 4 speakers)
 python -m speecher.cli --audio-file audio.wav --enable-speaker-identification --max-speakers 4
 ```
 
-## 🏗️ Architektura
+## 🏗️ Architecture
 
 ```
 speecher/
 ├── src/
-│   ├── speecher/           # Główna biblioteka
-│   │   ├── cli.py          # Interfejs CLI
-│   │   ├── main.py         # Główna logika
-│   │   ├── aws.py          # Integracja AWS Transcribe
-│   │   ├── azure.py        # Integracja Azure Speech
-│   │   ├── gcp.py          # Integracja Google Speech
-│   │   └── transcription.py # Przetwarzanie wyników
+│   ├── speecher/           # Core library
+│   │   ├── cli.py          # CLI interface
+│   │   ├── main.py         # Main logic
+│   │   ├── aws.py          # AWS Transcribe integration
+│   │   ├── azure.py        # Azure Speech integration
+│   │   ├── gcp.py          # Google Speech integration
+│   │   └── transcription.py # Results processing
 │   ├── backend/            # REST API (FastAPI)
-│   │   └── main.py         # Endpointy API
-│   └── frontend/           # Interfejs webowy (Streamlit)
-│       └── app.py          # Aplikacja frontend
-├── docker-compose.yml      # Konfiguracja Docker
-├── Dockerfile             # Obraz backend
-└── tests/                 # Testy jednostkowe
+│   │   └── main.py         # API endpoints
+│   └── frontend/           # Web interface (Streamlit)
+│       └── app.py          # Frontend application
+├── docker-compose.yml      # Docker configuration
+├── Dockerfile             # Backend image
+└── tests/                 # Unit tests
 ```
 
-## 🔧 Konfiguracja dostawców
+## 🔧 Provider Configuration
 
 ### AWS Transcribe
-1. Utwórz konto AWS
-2. Wygeneruj klucze dostępu (IAM)
-3. Utwórz bucket S3
-4. Nadaj uprawnienia do Transcribe i S3
+1. Create AWS account
+2. Generate access keys (IAM)
+3. Create S3 bucket
+4. Grant permissions for Transcribe and S3
 
 ```bash
-# W .env lub eksportuj
+# In .env or export
 AWS_ACCESS_KEY_ID=your_key
 AWS_SECRET_ACCESS_KEY=your_secret
 AWS_DEFAULT_REGION=eu-central-1
@@ -111,10 +111,10 @@ S3_BUCKET_NAME=your-bucket
 ```
 
 ### Azure Speech Services
-1. Utwórz konto Azure
-2. Utwórz Storage Account
-3. Włącz Cognitive Services - Speech
-4. Pobierz klucze
+1. Create Azure account
+2. Create Storage Account
+3. Enable Cognitive Services - Speech
+4. Get keys
 
 ```bash
 AZURE_STORAGE_ACCOUNT=your_account
@@ -124,10 +124,10 @@ AZURE_SPEECH_REGION=westeurope
 ```
 
 ### Google Cloud Speech-to-Text
-1. Utwórz projekt w GCP
-2. Włącz Speech-to-Text API
-3. Utwórz Service Account
-4. Pobierz plik credentials JSON
+1. Create GCP project
+2. Enable Speech-to-Text API
+3. Create Service Account
+4. Download credentials JSON file
 
 ```bash
 GCP_PROJECT_ID=your_project
@@ -137,9 +137,9 @@ GOOGLE_APPLICATION_CREDENTIALS=./gcp-credentials.json
 
 ## 📊 REST API
 
-### Główne endpointy
+### Main Endpoints
 
-#### Transkrypcja
+#### Transcription
 ```http
 POST /transcribe
 Content-Type: multipart/form-data
@@ -151,21 +151,21 @@ enable_diarization: true
 max_speakers: 4
 ```
 
-#### Historia
+#### History
 ```http
 GET /history?search=file&provider=aws&limit=50
 ```
 
-#### Statystyki
+#### Statistics
 ```http
 GET /stats
 ```
 
-### Przykład użycia (Python)
+### Usage Example (Python)
 ```python
 import requests
 
-# Upload i transkrypcja
+# Upload and transcribe
 with open("audio.wav", "rb") as f:
     response = requests.post(
         "http://localhost:8000/transcribe",
@@ -181,71 +181,71 @@ result = response.json()
 print(result["transcript"])
 ```
 
-## 🎨 Frontend - Funkcje
+## 🎨 Frontend Features
 
-### Panel konfiguracji
-- Wybór dostawcy chmury (AWS/Azure/GCP)
-- Wybór języka (11 języków)
-- Konfiguracja diaryzacji (2-10 mówców)
-- Formaty eksportu (TXT, SRT, JSON, VTT, PDF)
-- Szacowanie kosztów przed transkrypcją
+### Configuration Panel
+- Cloud provider selection (AWS/Azure/GCP)
+- Language selection (11 languages)
+- Diarization configuration (2-10 speakers)
+- Export formats (TXT, SRT, JSON, VTT, PDF)
+- Cost estimation before transcription
 
-### Historia transkrypcji
-- Tabela z filtrowaniem
-- Wyszukiwanie po nazwie
-- Filtrowanie po dacie i dostawcy
-- Podgląd pełnej transkrypcji
-- Pobieranie w różnych formatach
-- Usuwanie rekordów
+### Transcription History
+- Filterable table
+- Search by filename
+- Filter by date and provider
+- Full transcription preview
+- Download in various formats
+- Record deletion
 
 ### Monitoring
-- Status połączenia z API
-- Status bazy danych MongoDB
-- Statystyki użycia
-- Ostatnie transkrypcje
+- API connection status
+- MongoDB database status
+- Usage statistics
+- Recent transcriptions
 
-## 🧪 Testowanie
+## 🧪 Testing
 
 ```bash
-# Uruchom wszystkie testy
+# Run all tests
 pytest
 
-# Testy z coverage
+# Tests with coverage
 pytest --cov=speecher
 
-# Tylko testy jednostkowe
+# Unit tests only
 pytest tests/unit
 
-# Tylko testy integracyjne
+# Integration tests only
 pytest tests/integration
 ```
 
-## 📈 Wydajność
+## 📈 Performance
 
-| Dostawca | Czas przetwarzania | Dokładność | Koszt/min |
-|----------|-------------------|------------|-----------|
-| AWS      | ~30% czasu audio  | 95-98%     | $0.024    |
-| Azure    | ~25% czasu audio  | 94-97%     | $0.016    |
-| GCP      | ~35% czasu audio  | 93-96%     | $0.018    |
+| Provider | Processing Time | Accuracy | Cost/min |
+|----------|-----------------|----------|----------|
+| AWS      | ~30% of audio   | 95-98%   | $0.024   |
+| Azure    | ~25% of audio   | 94-97%   | $0.016   |
+| GCP      | ~35% of audio   | 93-96%   | $0.018   |
 
-*Dane przybliżone dla języka polskiego
+*Approximate data for Polish language
 
-## 🤝 Współpraca
+## 🤝 Contributing
 
-Zachęcamy do współpracy! Zobacz [CONTRIBUTING.md](CONTRIBUTING.md) dla szczegółów.
+We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
-### Jak pomóc
-1. Fork repozytorium
-2. Utwórz branch (`git checkout -b feature/AmazingFeature`)
-3. Commit zmiany (`git commit -m 'Add AmazingFeature'`)
-4. Push do branch (`git push origin feature/AmazingFeature`)
-5. Otwórz Pull Request
+### How to Contribute
+1. Fork the repository
+2. Create branch (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add AmazingFeature'`)
+4. Push to branch (`git push origin feature/AmazingFeature`)
+5. Open Pull Request
 
-## 📝 Licencja
+## 📝 License
 
-Projekt dostępny na licencji MIT. Zobacz [LICENSE](LICENSE) dla szczegółów.
+This project is available under MIT license. See [LICENSE](LICENSE) for details.
 
-## 🙏 Podziękowania
+## 🙏 Acknowledgments
 
 - [AWS Transcribe](https://aws.amazon.com/transcribe/)
 - [Azure Speech Services](https://azure.microsoft.com/services/cognitive-services/speech-services/)
@@ -254,11 +254,11 @@ Projekt dostępny na licencji MIT. Zobacz [LICENSE](LICENSE) dla szczegółów.
 - [Streamlit](https://streamlit.io/)
 - [MongoDB](https://www.mongodb.com/)
 
-## 📞 Kontakt
+## 📞 Contact
 
-Nazwa Projektu: Speecher  
+Project Name: Speecher  
 Link: [https://github.com/yourusername/speecher](https://github.com/yourusername/speecher)
 
 ---
 
-⭐ Jeśli projekt Ci się podoba, zostaw gwiazdkę na GitHub!
+⭐ If you like this project, leave a star on GitHub!

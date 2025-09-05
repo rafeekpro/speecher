@@ -1,48 +1,48 @@
 # Speecher - Docker Setup Guide
 
-## 🚀 Szybki start
+## 🚀 Quick Start
 
-### 1. Przygotuj konfigurację
+### 1. Prepare Configuration
 
 ```bash
-# Skopiuj przykładowy plik konfiguracji
+# Copy example configuration file
 cp .env.example .env
 
-# Edytuj plik .env i uzupełnij dane dostępowe do chmury
+# Edit .env file and add cloud access credentials
 nano .env
 ```
 
-### 2. Uruchom aplikację
+### 2. Launch Application
 
 ```bash
-# Zbuduj i uruchom wszystkie kontenery
+# Build and run all containers
 docker-compose up --build
 
-# Lub uruchom w tle
+# Or run in background
 docker-compose up -d --build
 ```
 
-### 3. Dostęp do aplikacji
+### 3. Access Application
 
 - **Frontend (Streamlit)**: http://localhost:8501
 - **Backend API**: http://localhost:8000
 - **API Docs**: http://localhost:8000/docs
 - **MongoDB**: localhost:27017
 
-## 📋 Wymagania
+## 📋 Requirements
 
 - Docker 20.10+
 - Docker Compose 1.29+
 - Min. 4GB RAM
-- 10GB wolnego miejsca na dysku
+- 10GB free disk space
 
-## ⚙️ Konfiguracja dostawców chmury
+## ⚙️ Cloud Provider Configuration
 
 ### AWS
-1. Utwórz konto AWS i wygeneruj klucze dostępu
-2. Utwórz bucket S3 lub użyj istniejącego
-3. Upewnij się, że masz uprawnienia do Amazon Transcribe
-4. Uzupełnij w `.env`:
+1. Create AWS account and generate access keys
+2. Create S3 bucket or use existing one
+3. Ensure you have Amazon Transcribe permissions
+4. Fill in `.env`:
    ```
    AWS_ACCESS_KEY_ID=your_key
    AWS_SECRET_ACCESS_KEY=your_secret
@@ -51,10 +51,10 @@ docker-compose up -d --build
    ```
 
 ### Azure
-1. Utwórz konto Azure i Storage Account
-2. Włącz Azure Speech Services
-3. Pobierz klucze dostępu
-4. Uzupełnij w `.env`:
+1. Create Azure account and Storage Account
+2. Enable Azure Speech Services
+3. Get access keys
+4. Fill in `.env`:
    ```
    AZURE_STORAGE_ACCOUNT=your_account
    AZURE_STORAGE_KEY=your_key
@@ -63,131 +63,131 @@ docker-compose up -d --build
    ```
 
 ### Google Cloud
-1. Utwórz projekt w GCP
-2. Włącz Speech-to-Text API
-3. Pobierz plik credentials JSON
-4. Umieść plik jako `gcp-credentials.json` w głównym katalogu
-5. Uzupełnij w `.env`:
+1. Create GCP project
+2. Enable Speech-to-Text API
+3. Download credentials JSON file
+4. Place file as `gcp-credentials.json` in root directory
+5. Fill in `.env`:
    ```
    GCP_PROJECT_ID=your_project
    GCP_BUCKET_NAME=your-bucket
    GCP_CREDENTIALS_FILE=./gcp-credentials.json
    ```
 
-## 🎨 Funkcje aplikacji
+## 🎨 Application Features
 
-### Frontend - Panel konfiguracji
-- **Wybór dostawcy chmury**: AWS, Azure, lub GCP
-- **Wybór języka**: 11 języków (PL, EN, DE, ES, FR, IT, PT, RU, ZH, JA)
-- **Diaryzacja mówców**: Automatyczne rozpoznawanie do 10 mówców
-- **Formaty eksportu**: TXT, SRT (napisy), JSON, VTT, PDF
-- **Szacowanie kosztów**: Przed transkrypcją
+### Frontend - Configuration Panel
+- **Cloud provider selection**: AWS, Azure, or GCP
+- **Language selection**: 11 languages (PL, EN, DE, ES, FR, IT, PT, RU, ZH, JA)
+- **Speaker diarization**: Automatic recognition up to 10 speakers
+- **Export formats**: TXT, SRT (subtitles), JSON, VTT, PDF
+- **Cost estimation**: Before transcription
 
-### Historia transkrypcji
-- Przeglądanie wszystkich transkrypcji
-- Filtrowanie po nazwie, dacie, dostawcy
-- Podgląd i pobieranie wyników
-- Usuwanie niepotrzebnych rekordów
+### Transcription History
+- View all transcriptions
+- Filter by name, date, provider
+- Preview and download results
+- Delete unnecessary records
 
 ### API Endpoints
-- `POST /transcribe` - Nowa transkrypcja
-- `GET /history` - Historia z filtrowaniem
-- `GET /transcription/{id}` - Szczegóły transkrypcji
-- `DELETE /transcription/{id}` - Usuwanie
-- `GET /stats` - Statystyki użycia
-- `GET /health` - Status API
-- `GET /db/health` - Status MongoDB
+- `POST /transcribe` - New transcription
+- `GET /history` - History with filtering
+- `GET /transcription/{id}` - Transcription details
+- `DELETE /transcription/{id}` - Delete
+- `GET /stats` - Usage statistics
+- `GET /health` - API status
+- `GET /db/health` - MongoDB status
 
-## 🔧 Zarządzanie kontenerami
+## 🔧 Container Management
 
 ```bash
-# Zatrzymaj wszystkie kontenery
+# Stop all containers
 docker-compose down
 
-# Zatrzymaj i usuń wolumeny (UWAGA: usuwa dane!)
+# Stop and remove volumes (WARNING: deletes data!)
 docker-compose down -v
 
-# Zobacz logi
+# View logs
 docker-compose logs -f
 
-# Logi konkretnego serwisu
+# Logs for specific service
 docker-compose logs -f backend
 docker-compose logs -f frontend
 docker-compose logs -f mongo
 
-# Restart serwisu
+# Restart service
 docker-compose restart backend
 
-# Skalowanie (uruchom wiele instancji backend)
+# Scale (run multiple backend instances)
 docker-compose up -d --scale backend=3
 ```
 
-## 📊 Monitorowanie
+## 📊 Monitoring
 
 ```bash
-# Status kontenerów
+# Container status
 docker-compose ps
 
-# Użycie zasobów
+# Resource usage
 docker stats
 
-# Sprawdź health API
+# Check API health
 curl http://localhost:8000/health
 
-# Sprawdź połączenie z MongoDB
+# Check MongoDB connection
 curl http://localhost:8000/db/health
 
-# Zobacz statystyki
+# View statistics
 curl http://localhost:8000/stats
 ```
 
-## 🐛 Rozwiązywanie problemów
+## 🐛 Troubleshooting
 
-### Backend nie może połączyć się z MongoDB
+### Backend cannot connect to MongoDB
 ```bash
-# Sprawdź logi MongoDB
+# Check MongoDB logs
 docker-compose logs mongo
 
-# Zrestartuj MongoDB
+# Restart MongoDB
 docker-compose restart mongo
 ```
 
-### Frontend nie łączy się z backend
+### Frontend not connecting to backend
 ```bash
-# Sprawdź czy backend działa
+# Check if backend is running
 curl http://localhost:8000/health
 
-# Sprawdź logi
+# Check logs
 docker-compose logs backend
 docker-compose logs frontend
 ```
 
-### Błędy uprawnień do chmury
-- Sprawdź poprawność kluczy w `.env`
-- Upewnij się, że konto ma wymagane uprawnienia
-- Dla GCP sprawdź czy plik credentials istnieje
+### Cloud permission errors
+- Verify keys in `.env` are correct
+- Ensure account has required permissions
+- For GCP check if credentials file exists
 
-## 🔒 Bezpieczeństwo
+## 🔒 Security
 
-1. **Nigdy nie commituj pliku `.env`** - dodaj go do `.gitignore`
-2. **Użyj silnych haseł** dla MongoDB
-3. **Ogranicz dostęp** do portów w produkcji
-4. **Regularnie aktualizuj** obrazy Docker
-5. **Szyfruj połączenia** używając reverse proxy (np. Nginx)
+1. **Never commit `.env` file** - add it to `.gitignore`
+2. **Use strong passwords** for MongoDB
+3. **Restrict port access** in production
+4. **Regularly update** Docker images
+5. **Encrypt connections** using reverse proxy (e.g., Nginx)
 
-## 📦 Deployment produkcyjny
+## 📦 Production Deployment
 
-Dla środowiska produkcyjnego:
+For production environment:
 
-1. Zmień hasła domyślne
-2. Użyj Docker Swarm lub Kubernetes
-3. Dodaj SSL/TLS (np. przez Traefik)
-4. Skonfiguruj backupy MongoDB
-5. Monitoruj logi (np. ELK Stack)
-6. Ustaw limity zasobów w docker-compose
+1. Change default passwords
+2. Use Docker Swarm or Kubernetes
+3. Add SSL/TLS (e.g., via Traefik)
+4. Configure MongoDB backups
+5. Monitor logs (e.g., ELK Stack)
+6. Set resource limits in docker-compose
 
 ```yaml
-# Przykład limitów w docker-compose.yml
+# Example limits in docker-compose.yml
 services:
   backend:
     deploy:
@@ -200,6 +200,6 @@ services:
           memory: 1G
 ```
 
-## 📝 Licencja
+## 📝 License
 
-Ten projekt jest dostępny na licencji MIT.
+This project is available under MIT license.
