@@ -4,7 +4,7 @@ Integration tests for MongoDB and end-to-end API flows
 import pytest
 import asyncio
 from datetime import datetime, timedelta
-from bson import ObjectId
+from bson.objectid import ObjectId
 import mongomock
 from unittest.mock import patch, Mock, AsyncMock
 import sys
