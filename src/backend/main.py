@@ -121,17 +121,17 @@ async def transcribe(
     
     try:
         # Process based on selected provider
-        if provider == CloudProvider.AWS:
+        if provider == CloudProvider.AWS.value:
             result = await process_aws_transcription(
                 temp_file_path, file.filename, language,
                 enable_diarization, max_speakers
             )
-        elif provider == CloudProvider.AZURE:
+        elif provider == CloudProvider.AZURE.value:
             result = await process_azure_transcription(
                 temp_file_path, file.filename, language,
                 enable_diarization, max_speakers
             )
-        elif provider == CloudProvider.GCP:
+        elif provider == CloudProvider.GCP.value:
             result = await process_gcp_transcription(
                 temp_file_path, file.filename, language,
                 enable_diarization, max_speakers
@@ -347,30 +347,34 @@ async def get_transcription_history(
 async def get_transcription(transcription_id: str) -> Dict[str, Any]:
     """Get a specific transcription by ID."""
     try:
-        doc = collection.find_one({"_id": ObjectId(transcription_id)})
-        if not doc:
-            raise HTTPException(status_code=404, detail="Transcription not found")
-        
-        doc["id"] = str(doc["_id"])
-        doc.pop("_id", None)
-        if "created_at" in doc:
-            doc["created_at"] = doc["created_at"].isoformat()
-        
-        return doc
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        object_id = ObjectId(transcription_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Invalid transcription ID")
+    
+    doc = collection.find_one({"_id": object_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Transcription not found")
+    
+    doc["id"] = str(doc["_id"])
+    doc.pop("_id", None)
+    if "created_at" in doc:
+        doc["created_at"] = doc["created_at"].isoformat()
+    
+    return doc
 
 @app.delete("/transcription/{transcription_id}")
 async def delete_transcription(transcription_id: str):
     """Delete a transcription by ID."""
     try:
-        result = collection.delete_one({"_id": ObjectId(transcription_id)})
-        if result.deleted_count == 0:
-            raise HTTPException(status_code=404, detail="Transcription not found")
-        
-        return {"message": "Transcription deleted successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        object_id = ObjectId(transcription_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="Invalid transcription ID")
+    
+    result = collection.delete_one({"_id": object_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Transcription not found")
+    
+    return {"message": "Transcription deleted successfully"}
 
 @app.get("/health")
 async def health_check():

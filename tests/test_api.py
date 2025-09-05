@@ -428,7 +428,7 @@ class TestCostCalculation:
         from backend.main import calculate_cost
         
         cost = calculate_cost("gcp", 180)  # 3 minutes
-        assert cost == 0.054
+        assert abs(cost - 0.054) < 0.0001  # Use approximate comparison for floating point
     
     def test_cost_calculation_unknown_provider(self):
         """Test cost calculation for unknown provider"""
