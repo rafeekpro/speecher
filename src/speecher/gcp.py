@@ -16,10 +16,8 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 from google.cloud import storage
-from google.cloud import speech_v1p1beta1 as speech
-from google.cloud.speech_v1p1beta1 import enums
-from google.cloud.speech_v1 import RecognitionConfig
-from google.cloud.speech_v1.types import RecognitionAudio
+from google.cloud import speech
+from google.cloud.speech import RecognitionConfig, RecognitionAudio
 from google.protobuf.json_format import MessageToDict
 import requests
 from google.oauth2 import service_account
@@ -138,7 +136,7 @@ def start_transcription_job(gcs_uri, project_id, job_name=None, language_code="p
         
         # Określ format audio - zakładamy WAV
         config = speech.types.RecognitionConfig(
-            encoding=speech.enums.RecognitionConfig.AudioEncoding.LINEAR16,
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
             sample_rate_hertz=16000,  # Hz - to trzeba dostosować do faktycznego pliku
             language_code=language_code,
             enable_speaker_diarization=True,
@@ -476,7 +474,7 @@ def transcribe_short_audio(audio_file_path, project_id, language_code="pl-PL", m
         
         # Określ format audio - zakładamy WAV
         config = speech.types.RecognitionConfig(
-            encoding=speech.enums.RecognitionConfig.AudioEncoding.LINEAR16,
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
             sample_rate_hertz=16000,  # Hz - to trzeba dostosować do faktycznego pliku
             language_code=language_code,
             enable_automatic_punctuation=True
