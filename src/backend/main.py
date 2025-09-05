@@ -19,10 +19,18 @@ from pymongo import MongoClient
 from pydantic import BaseModel
 from bson import ObjectId
 
+import sys
+import os
+# Add parent directory to path to import speecher module
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
 from speecher import aws as aws_service
 from speecher import azure as azure_service
 from speecher import gcp as gcp_service
-from speecher.transcription import process_transcription_result
+from speecher import transcription
+
+# Import cloud wrappers for missing functions
+from backend import cloud_wrappers
 
 # Configuration from environment variables
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
@@ -198,18 +206,14 @@ async def process_aws_transcription(
     
     # Start transcription job
     job_name = f"speecher-{uuid.uuid4()}"
-    job_config = {
-        "job_name": job_name,
-        "bucket_name": S3_BUCKET_NAME,
-        "file_name": filename,
-        "language": language
-    }
     
-    if enable_diarization:
-        job_config["enable_speaker_identification"] = True
-        job_config["max_speakers"] = max_speakers
-    
-    trans_resp = aws_service.start_transcription_job(**job_config)
+    trans_resp = aws_service.start_transcription_job(
+        job_name=job_name,
+        bucket_name=S3_BUCKET_NAME,
+        object_key=filename,
+        language_code=language,
+        max_speakers=max_speakers if enable_diarization else 1
+    )
     if not trans_resp:
         raise Exception("Failed to start AWS transcription job")
     
@@ -223,7 +227,7 @@ async def process_aws_transcription(
     transcription_data = aws_service.download_transcription_result(transcript_uri)
     
     # Process with speaker diarization
-    result = process_transcription_result(transcription_data, enable_diarization)
+    result = process_transcription_data(transcription_data, enable_diarization)
     
     # Clean up S3
     try:
@@ -242,7 +246,7 @@ async def process_azure_transcription(
         raise ValueError("Azure storage not configured")
     
     # Upload to Azure Blob Storage
-    blob_url = azure_service.upload_to_blob(
+    blob_url = cloud_wrappers.upload_to_blob(
         file_path, AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY,
         AZURE_CONTAINER_NAME, filename
     )
@@ -251,7 +255,7 @@ async def process_azure_transcription(
         raise Exception("Failed to upload file to Azure Blob Storage")
     
     # Start transcription
-    transcription_result = azure_service.transcribe_from_blob(
+    transcription_result = cloud_wrappers.transcribe_from_blob(
         blob_url, language, enable_diarization, max_speakers
     )
     
@@ -263,7 +267,7 @@ async def process_azure_transcription(
     
     # Clean up blob
     try:
-        azure_service.delete_blob(
+        cloud_wrappers.delete_blob(
             AZURE_STORAGE_ACCOUNT, AZURE_STORAGE_KEY,
             AZURE_CONTAINER_NAME, filename
         )
@@ -281,12 +285,12 @@ async def process_gcp_transcription(
         raise ValueError("GCP bucket not configured")
     
     # Upload to GCS
-    gcs_uri = gcp_service.upload_to_gcs(file_path, GCP_BUCKET_NAME, filename)
+    gcs_uri = cloud_wrappers.upload_to_gcs(file_path, GCP_BUCKET_NAME, filename)
     if not gcs_uri:
         raise Exception("Failed to upload file to Google Cloud Storage")
     
     # Start transcription
-    transcription_result = gcp_service.transcribe_from_gcs(
+    transcription_result = cloud_wrappers.transcribe_from_gcs(
         gcs_uri, language, enable_diarization, max_speakers
     )
     
@@ -298,7 +302,7 @@ async def process_gcp_transcription(
     
     # Clean up GCS
     try:
-        gcp_service.delete_from_gcs(GCP_BUCKET_NAME, filename)
+        cloud_wrappers.delete_from_gcs(GCP_BUCKET_NAME, filename)
     except:
         pass
     
@@ -410,6 +414,68 @@ async def get_statistics():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+def process_transcription_data(transcription_data: Dict[str, Any], enable_diarization: bool) -> Dict[str, Any]:
+    """Process transcription data and extract relevant information."""
+    result = {
+        "transcript": "",
+        "speakers": [],
+        "duration": 0.0
+    }
+    
+    # If we have the full transcription module function available
+    if hasattr(transcription, 'process_transcription_result'):
+        # Use the original function but adapt its output
+        transcription.process_transcription_result(transcription_data)
+    
+    # Extract transcript text
+    if 'results' in transcription_data:
+        results = transcription_data['results']
+        
+        # Get transcript
+        if 'transcripts' in results and results['transcripts']:
+            result["transcript"] = results['transcripts'][0].get('transcript', '')
+        elif 'items' in results:
+            # Build transcript from items
+            words = []
+            for item in results['items']:
+                if item.get('alternatives'):
+                    words.append(item['alternatives'][0].get('content', ''))
+            result["transcript"] = ' '.join(words)
+        
+        # Process speaker diarization if enabled
+        if enable_diarization and 'speaker_labels' in results:
+            segments = results['speaker_labels'].get('segments', [])
+            for segment in segments:
+                speaker_data = {
+                    "speaker": f"Speaker {segment.get('speaker_label', 'Unknown')}",
+                    "text": "",
+                    "start_time": float(segment.get('start_time', 0)),
+                    "end_time": float(segment.get('end_time', 0))
+                }
+                result["speakers"].append(speaker_data)
+        
+        # Calculate duration from the last item or segment
+        if 'items' in results and results['items']:
+            last_item = results['items'][-1]
+            if 'end_time' in last_item:
+                result["duration"] = float(last_item['end_time'])
+    
+    # Handle Azure format
+    elif 'displayText' in transcription_data:
+        result["transcript"] = transcription_data.get('displayText', '')
+        if 'duration' in transcription_data:
+            result["duration"] = transcription_data['duration'] / 10000000  # Convert from 100-nanosecond units
+    
+    # Handle GCP format
+    elif 'results' in transcription_data and isinstance(transcription_data['results'], list):
+        transcripts = []
+        for res in transcription_data['results']:
+            if 'alternatives' in res and res['alternatives']:
+                transcripts.append(res['alternatives'][0].get('transcript', ''))
+        result["transcript"] = ' '.join(transcripts)
+    
+    return result
 
 def format_timestamp(seconds: float) -> str:
     """Format seconds to HH:MM:SS format."""

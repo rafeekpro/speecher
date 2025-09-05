@@ -67,7 +67,7 @@ class TestTranscribeEndpoint:
              patch('backend.main.aws_service.wait_for_job_completion') as mock_wait, \
              patch('backend.main.aws_service.download_transcription_result') as mock_download, \
              patch('backend.main.aws_service.delete_file_from_s3') as mock_delete, \
-             patch('backend.main.process_transcription_result') as mock_process:
+             patch('backend.main.process_transcription_data') as mock_process:
             
             mock_upload.return_value = True
             mock_start.return_value = {"JobName": "test-job"}
@@ -135,17 +135,17 @@ class TestTranscribeEndpoint:
         assert "Invalid file type" in response.json()["detail"]
     
     @patch('backend.main.collection')
-    @patch('backend.main.azure_service')
-    def test_transcribe_azure_success(self, mock_azure, mock_collection, audio_file):
+    @patch('backend.main.cloud_wrappers')
+    def test_transcribe_azure_success(self, mock_wrappers, mock_collection, audio_file):
         """Test successful Azure transcription"""
         mock_collection.insert_one.return_value = Mock(inserted_id=ObjectId())
         
         # Mock Azure functions
-        mock_azure.upload_to_blob.return_value = "https://blob.url"
-        mock_azure.transcribe_from_blob.return_value = {"transcript": "Azure test"}
-        mock_azure.delete_blob.return_value = True
+        mock_wrappers.upload_to_blob.return_value = "https://blob.url"
+        mock_wrappers.transcribe_from_blob.return_value = {"transcript": "Azure test"}
+        mock_wrappers.delete_blob.return_value = True
         
-        with patch('backend.main.process_transcription_result') as mock_process:
+        with patch('backend.main.process_transcription_data') as mock_process:
             mock_process.return_value = {
                 "transcript": "Azure transcription",
                 "speakers": [],
@@ -172,17 +172,17 @@ class TestTranscribeEndpoint:
         assert data["transcript"] == "Azure transcription"
     
     @patch('backend.main.collection')
-    @patch('backend.main.gcp_service')
-    def test_transcribe_gcp_success(self, mock_gcp, mock_collection, audio_file):
+    @patch('backend.main.cloud_wrappers')
+    def test_transcribe_gcp_success(self, mock_wrappers, mock_collection, audio_file):
         """Test successful GCP transcription"""
         mock_collection.insert_one.return_value = Mock(inserted_id=ObjectId())
         
         # Mock GCP functions
-        mock_gcp.upload_to_gcs.return_value = "gs://bucket/file"
-        mock_gcp.transcribe_from_gcs.return_value = {"transcript": "GCP test"}
-        mock_gcp.delete_from_gcs.return_value = True
+        mock_wrappers.upload_to_gcs.return_value = "gs://bucket/file"
+        mock_wrappers.transcribe_from_gcs.return_value = {"transcript": "GCP test"}
+        mock_wrappers.delete_from_gcs.return_value = True
         
-        with patch('backend.main.process_transcription_result') as mock_process:
+        with patch('backend.main.process_transcription_data') as mock_process:
             mock_process.return_value = {
                 "transcript": "GCP transcription",
                 "speakers": [],
