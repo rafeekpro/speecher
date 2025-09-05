@@ -1,0 +1,279 @@
+name: Pull Request Checks
+
+on:
+  pull_request:
+    types: [ opened, synchronize, reopened, ready_for_review ]
+    branches: [ main, develop ]
+
+env:
+  PYTHON_VERSION: '3.11'
+
+# Cancel previous runs for the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+      tests: ${{ steps.filter.outputs.tests }}
+    steps:
+    - uses: actions/checkout@v3
+    - uses: dorny/paths-filter@v2
+      id: filter
+      with:
+        filters: |
+          backend:
+            - 'src/backend/**'
+            - 'src/speecher/**'
+            - 'Dockerfile'
+            - 'requirements*.txt'
+            - 'pyproject.toml'
+          frontend:
+            - 'src/frontend/**'
+          tests:
+            - 'tests/**'
+            - 'run_api_tests.sh'
+            - 'pytest.ini'
+
+  run-tests:
+    name: 🧪 Run All Tests
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.tests == 'true'
+    
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ping: 1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v3
+    
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: 📦 Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: 📚 Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-test.txt
+        pip install fastapi uvicorn pymongo mongomock
+        pip install boto3 azure-storage-blob google-cloud-speech
+        pip install requests pandas streamlit
+    
+    - name: 🔬 Run unit tests with coverage
+      env:
+        MONGODB_URI: mongodb://localhost:27017
+        S3_BUCKET_NAME: test-bucket
+        AZURE_STORAGE_ACCOUNT: test-account
+        GCP_PROJECT_ID: test-project
+      run: |
+        pytest tests/test_api.py -v --cov=src/backend --cov-report=xml --cov-report=term-missing
+    
+    - name: 🔗 Run integration tests
+      env:
+        MONGODB_URI: mongodb://localhost:27017
+      run: |
+        pytest tests/test_integration.py -v --junit-xml=test-results/junit.xml
+    
+    - name: 📊 Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: test-results/
+    
+    - name: 📈 Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        fail_ci_if_error: false
+    
+    - name: 💬 Comment test results on PR
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          const coverage = fs.existsSync('./coverage.xml') ? '✅ Coverage report generated' : '⚠️ No coverage report';
+          
+          const comment = `## 🧪 Test Results
+          
+          | Test Suite | Status |
+          |------------|--------|
+          | Unit Tests | ✅ Passed |
+          | Integration Tests | ✅ Passed |
+          | Coverage | ${coverage} |
+          
+          All tests completed successfully! `;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
+
+  code-quality:
+    name: 🎨 Code Quality
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v3
+    
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: 📚 Install linting tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort mypy pylint
+    
+    - name: 🖤 Check Black formatting
+      id: black
+      run: |
+        black --check src/ tests/ || echo "::warning::Code needs formatting with Black"
+    
+    - name: 📦 Check import sorting
+      id: isort
+      run: |
+        isort --check-only src/ tests/ || echo "::warning::Imports need sorting with isort"
+    
+    - name: 📏 Run Flake8
+      id: flake8
+      run: |
+        flake8 src/ tests/ --max-line-length=120 --ignore=E203,W503 --format=github
+      continue-on-error: true
+    
+    - name: 🔍 Run Pylint
+      id: pylint
+      run: |
+        pylint src/ --exit-zero --output-format=parseable
+      continue-on-error: true
+
+  security-scan:
+    name: 🔒 Security Scan
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v3
+    
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: 🔐 Run Bandit security scan
+      run: |
+        pip install bandit
+        bandit -r src/ -f json -o bandit-report.json || true
+    
+    - name: 🛡️ Run Safety check
+      run: |
+        pip install safety
+        pip install -r requirements-test.txt
+        safety check --json || true
+    
+    - name: 📤 Upload security reports
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+
+  docker-build:
+    name: 🐳 Docker Build Test
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
+    
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v3
+    
+    - name: 🔧 Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
+    
+    - name: 🏗️ Build Backend Docker image
+      run: |
+        docker build -t speecher-backend:pr-${{ github.event.pull_request.number }} .
+    
+    - name: 🏗️ Build Frontend Docker image
+      run: |
+        docker build -t speecher-frontend:pr-${{ github.event.pull_request.number }} ./src/frontend
+    
+    - name: 🧪 Test Docker Compose configuration
+      run: |
+        docker-compose config
+
+  pr-status:
+    name: ✅ PR Status Check
+    runs-on: ubuntu-latest
+    needs: [run-tests, code-quality, security-scan, docker-build]
+    if: always()
+    
+    steps:
+    - name: 📊 Check all job results
+      run: |
+        if [[ "${{ needs.run-tests.result }}" == "failure" || 
+              "${{ needs.docker-build.result }}" == "failure" ]]; then
+          echo "❌ Required checks failed!"
+          exit 1
+        fi
+        echo "✅ All required checks passed!"
+    
+    - name: 💬 Final status comment
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const checksPassed = '${{ needs.run-tests.result }}' !== 'failure' && 
+                              '${{ needs.docker-build.result }}' !== 'failure';
+          
+          const emoji = checksPassed ? '✅' : '❌';
+          const status = checksPassed ? 'ready to merge' : 'needs fixes';
+          
+          const comment = `## ${emoji} PR Status: ${status}
+          
+          | Check | Result |
+          |-------|--------|
+          | Tests | ${{ needs.run-tests.result }} |
+          | Code Quality | ${{ needs.code-quality.result }} |
+          | Security | ${{ needs.security-scan.result }} |
+          | Docker Build | ${{ needs.docker-build.result }} |
+          `;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: comment
+          });
