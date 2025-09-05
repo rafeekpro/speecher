@@ -12,6 +12,13 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
+# Mock cloud service modules before importing backend
+from tests.cloud_mocks import MockAWSService, MockAzureService, MockGCPService, MockTranscription
+sys.modules['speecher.aws'] = MockAWSService
+sys.modules['speecher.azure'] = MockAzureService
+sys.modules['speecher.gcp'] = MockGCPService
+sys.modules['speecher.transcription'] = MockTranscription
+
 from fastapi.testclient import TestClient
 from backend.main import app
 
