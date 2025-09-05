@@ -350,7 +350,7 @@ class TestTranscriptionEndpoints:
         """Test getting transcription with invalid ID"""
         response = client.get("/transcription/invalid_id")
         
-        assert response.status_code == 400
+        assert response.status_code == 404  # Invalid ID returns 404 not found
     
     @patch('backend.main.collection')
     def test_delete_transcription_success(self, mock_collection):

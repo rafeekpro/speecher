@@ -183,6 +183,8 @@ async def transcribe(
             cost_estimate=cost_estimate
         )
         
+    except HTTPException:
+        raise  # Re-raise HTTPException without modifying
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -263,7 +265,7 @@ async def process_azure_transcription(
         raise Exception("Azure transcription failed")
     
     # Process result
-    result = process_transcription_result(transcription_result, enable_diarization)
+    result = process_transcription_data(transcription_result, enable_diarization)
     
     # Clean up blob
     try:
@@ -298,7 +300,7 @@ async def process_gcp_transcription(
         raise Exception("GCP transcription failed")
     
     # Process result
-    result = process_transcription_result(transcription_result, enable_diarization)
+    result = process_transcription_data(transcription_result, enable_diarization)
     
     # Clean up GCS
     try:
@@ -428,9 +430,9 @@ def process_transcription_data(transcription_data: Dict[str, Any], enable_diariz
     }
     
     # If we have the full transcription module function available
-    if hasattr(transcription, 'process_transcription_result'):
+    if hasattr(transcription, 'process_transcription_data'):
         # Use the original function but adapt its output
-        transcription.process_transcription_result(transcription_data)
+        transcription.process_transcription_data(transcription_data)
     
     # Extract transcript text
     if 'results' in transcription_data:
