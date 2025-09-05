@@ -77,10 +77,8 @@ jobs:
     - name: 📚 Install dependencies
       run: |
         python -m pip install --upgrade pip
+        pip install -r requirements.txt
         pip install -r requirements-test.txt
-        pip install fastapi uvicorn pymongo mongomock
-        pip install boto3 azure-storage-blob google-cloud-speech
-        pip install requests pandas streamlit
     
     - name: 🔬 Run unit tests with coverage
       env:
