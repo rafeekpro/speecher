@@ -109,30 +109,31 @@ jobs:
         flags: unittests
         fail_ci_if_error: false
     
-    - name: 💬 Comment test results on PR
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const fs = require('fs');
-          const coverage = fs.existsSync('./coverage.xml') ? '✅ Coverage report generated' : '⚠️ No coverage report';
-          
-          const comment = `## 🧪 Test Results
-          
-          | Test Suite | Status |
-          |------------|--------|
-          | Unit Tests | ✅ Passed |
-          | Integration Tests | ✅ Passed |
-          | Coverage | ${coverage} |
-          
-          All tests completed successfully! `;
-          
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: comment
-          });
+    # Comment step disabled - requires pull-requests: write permission
+    # - name: 💬 Comment test results on PR
+    #   if: github.event_name == 'pull_request'
+    #   uses: actions/github-script@v6
+    #   with:
+    #     script: |
+    #       const fs = require('fs');
+    #       const coverage = fs.existsSync('./coverage.xml') ? '✅ Coverage report generated' : '⚠️ No coverage report';
+    #       
+    #       const comment = `## 🧪 Test Results
+    #       
+    #       | Test Suite | Status |
+    #       |------------|--------|
+    #       | Unit Tests | ✅ Passed |
+    #       | Integration Tests | ✅ Passed |
+    #       | Coverage | ${coverage} |
+    #       
+    #       All tests completed successfully! `;
+    #       
+    #       github.rest.issues.createComment({
+    #         issue_number: context.issue.number,
+    #         owner: context.repo.owner,
+    #         repo: context.repo.repo,
+    #         body: comment
+    #       });
 
   code-quality:
     name: 🎨 Code Quality
