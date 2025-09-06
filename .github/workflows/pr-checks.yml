@@ -249,30 +249,31 @@ jobs:
         fi
         echo "✅ All required checks passed!"
     
-    - name: 💬 Final status comment
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const checksPassed = '${{ needs.run-tests.result }}' !== 'failure' && 
-                              '${{ needs.docker-build.result }}' !== 'failure';
-          
-          const emoji = checksPassed ? '✅' : '❌';
-          const status = checksPassed ? 'ready to merge' : 'needs fixes';
-          
-          const comment = `## ${emoji} PR Status: ${status}
-          
-          | Check | Result |
-          |-------|--------|
-          | Tests | ${{ needs.run-tests.result }} |
-          | Code Quality | ${{ needs.code-quality.result }} |
-          | Security | ${{ needs.security-scan.result }} |
-          | Docker Build | ${{ needs.docker-build.result }} |
-          `;
-          
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: comment
-          });
+    # Comment disabled - requires pull-requests: write permission
+    # - name: 💬 Final status comment
+    #   if: github.event_name == 'pull_request'
+    #   uses: actions/github-script@v6
+    #   with:
+    #     script: |
+    #       const checksPassed = '${{ needs.run-tests.result }}' !== 'failure' && 
+    #                           '${{ needs.docker-build.result }}' !== 'failure';
+    #       
+    #       const emoji = checksPassed ? '✅' : '❌';
+    #       const status = checksPassed ? 'ready to merge' : 'needs fixes';
+    #       
+    #       const comment = `## ${emoji} PR Status: ${status}
+    #       
+    #       | Check | Result |
+    #       |-------|--------|
+    #       | Tests | ${{ needs.run-tests.result }} |
+    #       | Code Quality | ${{ needs.code-quality.result }} |
+    #       | Security | ${{ needs.security-scan.result }} |
+    #       | Docker Build | ${{ needs.docker-build.result }} |
+    #       `;
+    #       
+    #       github.rest.issues.createComment({
+    #         issue_number: context.issue.number,
+    #         owner: context.repo.owner,
+    #         repo: context.repo.repo,
+    #         body: comment
+    #       });
