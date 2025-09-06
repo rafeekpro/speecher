@@ -22,7 +22,7 @@ jobs:
       frontend: ${{ steps.filter.outputs.frontend }}
       tests: ${{ steps.filter.outputs.tests }}
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - uses: dorny/paths-filter@v2
       id: filter
       with:
@@ -59,7 +59,7 @@ jobs:
     
     steps:
     - name: 📥 Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: 🐍 Set up Python
       uses: actions/setup-python@v4
@@ -67,7 +67,7 @@ jobs:
         python-version: ${{ env.PYTHON_VERSION }}
     
     - name: 📦 Cache dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
@@ -77,10 +77,8 @@ jobs:
     - name: 📚 Install dependencies
       run: |
         python -m pip install --upgrade pip
+        pip install -r requirements.txt
         pip install -r requirements-test.txt
-        pip install fastapi uvicorn pymongo mongomock
-        pip install boto3 azure-storage-blob google-cloud-speech
-        pip install requests pandas streamlit
     
     - name: 🔬 Run unit tests with coverage
       env:
@@ -99,7 +97,7 @@ jobs:
     
     - name: 📊 Upload test results
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results
         path: test-results/
@@ -111,30 +109,31 @@ jobs:
         flags: unittests
         fail_ci_if_error: false
     
-    - name: 💬 Comment test results on PR
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const fs = require('fs');
-          const coverage = fs.existsSync('./coverage.xml') ? '✅ Coverage report generated' : '⚠️ No coverage report';
-          
-          const comment = `## 🧪 Test Results
-          
-          | Test Suite | Status |
-          |------------|--------|
-          | Unit Tests | ✅ Passed |
-          | Integration Tests | ✅ Passed |
-          | Coverage | ${coverage} |
-          
-          All tests completed successfully! `;
-          
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: comment
-          });
+    # Comment step disabled - requires pull-requests: write permission
+    # - name: 💬 Comment test results on PR
+    #   if: github.event_name == 'pull_request'
+    #   uses: actions/github-script@v6
+    #   with:
+    #     script: |
+    #       const fs = require('fs');
+    #       const coverage = fs.existsSync('./coverage.xml') ? '✅ Coverage report generated' : '⚠️ No coverage report';
+    #       
+    #       const comment = `## 🧪 Test Results
+    #       
+    #       | Test Suite | Status |
+    #       |------------|--------|
+    #       | Unit Tests | ✅ Passed |
+    #       | Integration Tests | ✅ Passed |
+    #       | Coverage | ${coverage} |
+    #       
+    #       All tests completed successfully! `;
+    #       
+    #       github.rest.issues.createComment({
+    #         issue_number: context.issue.number,
+    #         owner: context.repo.owner,
+    #         repo: context.repo.repo,
+    #         body: comment
+    #       });
 
   code-quality:
     name: 🎨 Code Quality
@@ -144,7 +143,7 @@ jobs:
     
     steps:
     - name: 📥 Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: 🐍 Set up Python
       uses: actions/setup-python@v4
@@ -184,7 +183,7 @@ jobs:
     
     steps:
     - name: 📥 Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: 🐍 Set up Python
       uses: actions/setup-python@v4
@@ -203,7 +202,7 @@ jobs:
         safety check --json || true
     
     - name: 📤 Upload security reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: security-reports
         path: |
@@ -217,7 +216,7 @@ jobs:
     
     steps:
     - name: 📥 Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: 🔧 Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
@@ -232,7 +231,7 @@ jobs:
     
     - name: 🧪 Test Docker Compose configuration
       run: |
-        docker-compose config
+        docker compose config
 
   pr-status:
     name: ✅ PR Status Check
@@ -250,30 +249,31 @@ jobs:
         fi
         echo "✅ All required checks passed!"
     
-    - name: 💬 Final status comment
-      if: github.event_name == 'pull_request'
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const checksPassed = '${{ needs.run-tests.result }}' !== 'failure' && 
-                              '${{ needs.docker-build.result }}' !== 'failure';
-          
-          const emoji = checksPassed ? '✅' : '❌';
-          const status = checksPassed ? 'ready to merge' : 'needs fixes';
-          
-          const comment = `## ${emoji} PR Status: ${status}
-          
-          | Check | Result |
-          |-------|--------|
-          | Tests | ${{ needs.run-tests.result }} |
-          | Code Quality | ${{ needs.code-quality.result }} |
-          | Security | ${{ needs.security-scan.result }} |
-          | Docker Build | ${{ needs.docker-build.result }} |
-          `;
-          
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: comment
-          });
+    # Comment disabled - requires pull-requests: write permission
+    # - name: 💬 Final status comment
+    #   if: github.event_name == 'pull_request'
+    #   uses: actions/github-script@v6
+    #   with:
+    #     script: |
+    #       const checksPassed = '${{ needs.run-tests.result }}' !== 'failure' && 
+    #                           '${{ needs.docker-build.result }}' !== 'failure';
+    #       
+    #       const emoji = checksPassed ? '✅' : '❌';
+    #       const status = checksPassed ? 'ready to merge' : 'needs fixes';
+    #       
+    #       const comment = `## ${emoji} PR Status: ${status}
+    #       
+    #       | Check | Result |
+    #       |-------|--------|
+    #       | Tests | ${{ needs.run-tests.result }} |
+    #       | Code Quality | ${{ needs.code-quality.result }} |
+    #       | Security | ${{ needs.security-scan.result }} |
+    #       | Docker Build | ${{ needs.docker-build.result }} |
+    #       `;
+    #       
+    #       github.rest.issues.createComment({
+    #         issue_number: context.issue.number,
+    #         owner: context.repo.owner,
+    #         repo: context.repo.repo,
+    #         body: comment
+    #       });

@@ -27,7 +27,7 @@ jobs:
           --health-retries 5
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -35,7 +35,7 @@ jobs:
         python-version: ${{ env.PYTHON_VERSION }}
     
     - name: Cache dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/pyproject.toml') }}
@@ -45,10 +45,8 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest pytest-cov pytest-asyncio
-        pip install fastapi uvicorn pymongo mongomock
-        pip install boto3 azure-storage-blob google-cloud-speech
-        pip install requests pandas streamlit
+        pip install -r requirements.txt
+        pip install -r requirements-test.txt
     
     - name: Run unit tests
       env:
@@ -78,7 +76,7 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -111,7 +109,7 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v2
@@ -126,19 +124,19 @@ jobs:
     
     - name: Test Docker Compose
       run: |
-        docker-compose config
-        docker-compose up -d
+        docker compose config
+        docker compose up -d
         sleep 10
-        docker-compose ps
+        docker compose ps
         curl -f http://localhost:8000/health || exit 1
-        docker-compose down
+        docker compose down
 
   security:
     name: Security Scan
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -151,7 +149,9 @@ jobs:
         pip install safety bandit
     
     - name: Run Safety check
-      run: safety check --json
+      run: |
+        pip install -r requirements.txt || true
+        safety check || true
       continue-on-error: true
     
     - name: Run Bandit
@@ -159,7 +159,7 @@ jobs:
       continue-on-error: true
     
     - name: Upload security reports
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: security-reports
         path: |
@@ -173,7 +173,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Deploy notification
       run: |

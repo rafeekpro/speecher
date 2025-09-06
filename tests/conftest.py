@@ -7,7 +7,7 @@ import os
 import sys
 from unittest.mock import Mock, MagicMock
 from datetime import datetime
-from bson import ObjectId
+from bson.objectid import ObjectId
 import mongomock
 
 # Add src to path

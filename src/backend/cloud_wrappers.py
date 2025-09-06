@@ -81,21 +81,21 @@ def upload_to_gcs(file_path: str, bucket_name: str, blob_name: str) -> Optional[
 def transcribe_from_gcs(gcs_uri: str, language: str, enable_diarization: bool, max_speakers: Optional[int]) -> Optional[Dict[str, Any]]:
     """Transcribe audio from GCS using Google Speech-to-Text"""
     try:
-        from google.cloud import speech_v1
+        from google.cloud import speech
         
-        client = speech_v1.SpeechClient()
+        client = speech.SpeechClient()
         
-        audio = speech_v1.RecognitionAudio(uri=gcs_uri)
+        audio = speech.RecognitionAudio(uri=gcs_uri)
         
         diarization_config = None
         if enable_diarization:
-            diarization_config = speech_v1.SpeakerDiarizationConfig(
+            diarization_config = speech.SpeakerDiarizationConfig(
                 enable_speaker_diarization=True,
                 max_speaker_count=max_speakers or 4
             )
         
-        config = speech_v1.RecognitionConfig(
-            encoding=speech_v1.RecognitionConfig.AudioEncoding.LINEAR16,
+        config = speech.RecognitionConfig(
+            encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
             language_code=language,
             diarization_config=diarization_config
         )
