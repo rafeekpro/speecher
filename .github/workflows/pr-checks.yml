@@ -41,7 +41,8 @@ jobs:
             - 'requirements*.txt'
             - 'pyproject.toml'
           frontend:
-            - 'src/frontend/**'
+            - 'src/react-frontend/**'
+            - 'docker/react.Dockerfile'
           tests:
             - 'tests/**'
             - 'run_api_tests.sh'
@@ -234,7 +235,7 @@ jobs:
     
     - name: 🏗️ Build Frontend Docker image
       run: |
-        docker build -t speecher-frontend:pr-${{ github.event.pull_request.number }} ./src/frontend
+        docker build -f docker/react.Dockerfile -t speecher-frontend:pr-${{ github.event.pull_request.number }} .
     
     - name: 🧪 Test Docker Compose configuration
       run: |

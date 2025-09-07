@@ -120,7 +120,7 @@ jobs:
     
     - name: Build Frontend Image
       run: |
-        docker build -t speecher-frontend:test ./src/frontend
+        docker build -f docker/react.Dockerfile -t speecher-frontend:test .
     
     - name: Test Docker Compose
       run: |
