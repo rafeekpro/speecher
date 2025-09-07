@@ -110,7 +110,7 @@ clean-docker: ## Remove Docker volumes and orphan containers
 
 # Git
 commit: ## Quick commit with message (usage: make commit m="your message")
-	git add -A && git commit -m "$(m)"
+	git add . && git commit -m "$(m)"
 
 push: ## Push to current branch
 	git push origin $(shell git branch --show-current)
