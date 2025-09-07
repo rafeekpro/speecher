@@ -46,7 +46,7 @@ jobs:
             - 'src/backend/**'
             - 'src/speecher/**'
             - 'Dockerfile'
-            - 'requirements*.txt'
+            - 'requirements/*.txt'
             - 'pyproject.toml'
           frontend:
             - 'src/react-frontend/**'
@@ -98,8 +98,8 @@ jobs:
     - name: 📚 Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-test.txt
+        pip install -r requirements/base.txt
+        pip install -r requirements/test.txt
     
     - name: 🔬 Run unit tests with coverage
       env:
@@ -224,7 +224,7 @@ jobs:
     - name: 🛡️ Run Safety check
       run: |
         pip install safety
-        pip install -r requirements-test.txt
+        pip install -r requirements/test.txt
         safety check --json || true
     
     - name: 📤 Upload security reports

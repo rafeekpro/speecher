@@ -18,29 +18,57 @@ Speecher is a professional audio transcription tool with automatic speaker recog
 - 🐳 **Docker ready** - full containerization with docker-compose
 - 📝 **Transcription history** - MongoDB for storing results
 
-## 🚀 Quick Start (Docker)
+## 📁 Project Structure
 
-### 1. Clone Repository
-```bash
-git clone https://github.com/yourusername/speecher.git
-cd speecher
+```
+speecher/
+├── src/                    # Source code
+│   ├── backend/           # FastAPI REST API
+│   ├── speecher/          # Core transcription library
+│   └── react-frontend/    # React web UI
+├── tests/                 # Test suites
+├── docs/                  # Documentation
+├── scripts/               # Utility scripts
+│   ├── docker/           # Docker scripts
+│   ├── dev/              # Development tools
+│   └── test/             # Test runners
+├── config/                # Configuration files
+├── requirements/          # Python dependencies
+└── Makefile              # Build automation
 ```
 
-### 2. Configuration
+## 🚀 Quick Start
+
+### Using Make (Recommended)
 ```bash
-cp .env.example .env
-# Edit .env and add API keys for selected providers
+# Install dependencies
+make install
+
+# Run tests
+make test
+
+# Start services with Docker
+make docker-up
+
+# See all commands
+make help
 ```
 
-### 3. Launch
+### Using Docker
 ```bash
+# Copy environment configuration
+cp config/.env.example .env
+# Edit .env and add API keys
+
+# Start all services
 docker-compose up --build
 ```
 
-### 4. Access Application
-- **Frontend**: http://localhost:8501
+### Access Points
+- **React Frontend**: http://localhost:3000
 - **API**: http://localhost:8000
 - **API Documentation**: http://localhost:8000/docs
+- **MongoDB**: localhost:27017
 
 ## 💻 Local Installation (CLI)
 
