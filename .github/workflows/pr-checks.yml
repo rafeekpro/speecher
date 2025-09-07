@@ -8,6 +8,13 @@ on:
 env:
   PYTHON_VERSION: '3.11'
 
+# Permissions needed for the workflow
+permissions:
+  contents: read
+  pull-requests: read
+  checks: write
+  issues: read
+
 # Cancel previous runs for the same PR
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
