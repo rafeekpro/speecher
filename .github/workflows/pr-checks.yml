@@ -101,20 +101,15 @@ jobs:
         pip install -r requirements/base.txt
         pip install -r requirements/test.txt
     
-    - name: 🔬 Run unit tests with coverage
+    - name: 🔬 Run all tests with coverage
       env:
         MONGODB_URI: mongodb://localhost:27017
         S3_BUCKET_NAME: test-bucket
         AZURE_STORAGE_ACCOUNT: test-account
         GCP_PROJECT_ID: test-project
       run: |
-        pytest tests/test_api.py -v --cov=src/backend --cov-report=xml --cov-report=term-missing
+        pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing --cov-fail-under=70
     
-    - name: 🔗 Run integration tests
-      env:
-        MONGODB_URI: mongodb://localhost:27017
-      run: |
-        pytest tests/test_integration.py -v --junit-xml=test-results/junit.xml
     
     - name: 📊 Upload test results
       if: always()
