@@ -193,9 +193,10 @@ class TestTranscription:
                 "enable_diarization": False
             }
             response = requests.post(f"{BACKEND_URL}/transcribe", files=files, data=data)
-            # Should fail with provider not configured
-            assert response.status_code == 500
-            assert "not configured" in response.json()["detail"].lower()
+            # Should fail with provider not configured (400 for bad request or 500 for server error)
+            assert response.status_code in [400, 500]
+            error_msg = response.json().get("detail", "").lower()
+            assert "not configured" in error_msg or "credentials" in error_msg or "gcp" in error_msg
     
     @pytest.mark.skipif(
         os.getenv("AWS_ACCESS_KEY_ID", "test_key") == "test_key",

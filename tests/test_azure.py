@@ -124,7 +124,7 @@ class TestAzureModule(unittest.TestCase):
         self.assertFalse(result)
     
     @patch('azure.storage.blob.BlobServiceClient.from_connection_string')
-    @patch('azure.storage.blob.generate_container_sas')
+    @patch('src.speecher.azure.generate_container_sas')
     def test_upload_file_to_blob(self, mock_generate_sas, mock_blob_service_client):
         """Test uploading file to Azure Blob Storage"""
         # Setup mocks
@@ -520,11 +520,12 @@ class TestAzureModule(unittest.TestCase):
                 self.assertEqual(languages["en-US"], "angielski (USA)")
     
     # Test dla transcribe_short_audio - używamy prostego mockowania zamiast skomplikowanej struktury
-    @patch('azure.cognitiveservices.speech.SpeechConfig')
-    @patch('azure.cognitiveservices.speech.audio.AudioConfig')
-    @patch('azure.cognitiveservices.speech.SpeechRecognizer')
-    @patch('azure.cognitiveservices.speech.ResultReason')
-    def test_transcribe_short_audio(self, mock_result_reason, mock_recognizer_class, mock_audio_config, mock_speech_config):
+    @patch('src.speecher.azure.SpeechConfig')
+    @patch('src.speecher.azure.AudioConfig')
+    @patch('src.speecher.azure.SpeechRecognizer')
+    @patch('src.speecher.azure.ResultReason')
+    @patch('src.speecher.azure.CancellationDetails')
+    def test_transcribe_short_audio(self, mock_cancellation_details, mock_result_reason, mock_recognizer_class, mock_audio_config, mock_speech_config):
         """Test transcribing short audio directly with Speech SDK"""
         # Pomiń test, jeśli funkcja nie istnieje
         if not hasattr(azure, 'transcribe_short_audio'):

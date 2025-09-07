@@ -116,7 +116,7 @@ class TestAWSModule(unittest.TestCase):
         
         result = aws.upload_file_to_s3(str(self.sample_wav_path), self.bucket_name)
         
-        self.assertTrue(result)
+        self.assertEqual(result, (True, self.bucket_name))
         mock_s3.upload_file.assert_called_once_with(
             str(self.sample_wav_path), 
             self.bucket_name, 
@@ -132,7 +132,7 @@ class TestAWSModule(unittest.TestCase):
         custom_name = "custom-audio.wav"
         result = aws.upload_file_to_s3(str(self.sample_wav_path), self.bucket_name, custom_name)
         
-        self.assertTrue(result)
+        self.assertEqual(result, (True, self.bucket_name))
         mock_s3.upload_file.assert_called_once_with(
             str(self.sample_wav_path), 
             self.bucket_name, 
@@ -142,18 +142,16 @@ class TestAWSModule(unittest.TestCase):
     @patch('boto3.client')
     def test_upload_file_to_s3_error(self, mock_boto_client):
         """Test error handling when uploading to S3"""
-        from botocore.exceptions import ClientError
-        
         mock_s3 = create_mock_s3_client()
         mock_s3.upload_file.side_effect = ClientError(
-            {"Error": {"Code": "NoSuchBucket", "Message": "The specified bucket does not exist"}},
+            {"Error": {"Code": "AccessDenied", "Message": "Access Denied"}},
             "UploadFile"
         )
         mock_boto_client.return_value = mock_s3
         
         result = aws.upload_file_to_s3(str(self.sample_wav_path), self.bucket_name)
         
-        self.assertFalse(result)
+        self.assertEqual(result, (False, None))
     
     @patch('boto3.client')
     def test_get_transcription_job_status(self, mock_boto_client):

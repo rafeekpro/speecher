@@ -227,12 +227,17 @@ class TestMainModule(unittest.TestCase):
                 # Verify that resources were not cleaned up
                 mock_cleanup.assert_not_called()
                 
-                # Check that the specific message about kept resources was logged
-                expected_message = f"Zasoby nie zostały usunięte. Bucket S3: {self.bucket_name}, Zadanie transkrypcji: {self.job_name}"
+                # Check that the message about kept resources was logged
+                # Since job_name is generated with UUID, we need to check for partial match
+                kept_resources_logged = False
+                for call in mock_logger_info.call_args_list:
+                    if len(call[0]) > 0:
+                        message = str(call[0][0])
+                        if "Zasoby nie zostały usunięte" in message and self.bucket_name in message:
+                            kept_resources_logged = True
+                            break
                 
-                # Use assert_any_call instead of assert_called_with to check that the message was logged
-                # among potentially many other log messages
-                mock_logger_info.assert_any_call(expected_message)
+                self.assertTrue(kept_resources_logged, "Expected log message about kept resources not found")
     
     @patch('argparse.ArgumentParser.parse_args')
     def test_main_function_with_timestamps(self, mock_parse_args):
