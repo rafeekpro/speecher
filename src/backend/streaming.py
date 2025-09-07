@@ -109,20 +109,20 @@ class WebSocketManager:
     
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
-        self.transcibers: Dict[str, StreamingTranscriber] = {}
+        self.transcribers: Dict[str, StreamingTranscriber] = {}
     
     async def connect(self, websocket: WebSocket, client_id: str):
         """Accept new WebSocket connection"""
         await websocket.accept()
         self.active_connections[client_id] = websocket
-        self.transcibers[client_id] = StreamingTranscriber()
+        self.transcribers[client_id] = StreamingTranscriber()
     
     def disconnect(self, client_id: str):
         """Remove connection on disconnect"""
         if client_id in self.active_connections:
             del self.active_connections[client_id]
-        if client_id in self.transcibers:
-            del self.transcibers[client_id]
+        if client_id in self.transcribers:
+            del self.transcribers[client_id]
     
     async def send_message(self, client_id: str, message: Dict[str, Any]):
         """Send message to specific client"""
@@ -131,8 +131,8 @@ class WebSocketManager:
     
     async def process_audio(self, client_id: str, audio_data: bytes) -> None:
         """Process audio from client and send back transcription"""
-        if client_id in self.transcibers:
-            result = await self.transcibers[client_id].process_audio_chunk(audio_data)
+        if client_id in self.transcribers:
+            result = await self.transcribers[client_id].process_audio_chunk(audio_data)
             if result:
                 await self.send_message(client_id, result)
 
@@ -157,15 +157,15 @@ async def handle_websocket_streaming(websocket: WebSocket, client_id: str):
                 
             elif data.get("type") == "config":
                 # Update configuration (language, provider, etc.)
-                if client_id in ws_manager.transcibers:
-                    transcriber = ws_manager.transcibers[client_id]
+                if client_id in ws_manager.transcribers:
+                    transcriber = ws_manager.transcribers[client_id]
                     transcriber.language = data.get("language", transcriber.language)
                     transcriber.provider = data.get("provider", transcriber.provider)
                     
             elif data.get("type") == "stop":
                 # Finalize transcription
-                if client_id in ws_manager.transcibers:
-                    final = ws_manager.transcibers[client_id].get_final_transcription()
+                if client_id in ws_manager.transcribers:
+                    final = ws_manager.transcribers[client_id].get_final_transcription()
                     await ws_manager.send_message(client_id, final)
                 break
                 
