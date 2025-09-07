@@ -12,8 +12,16 @@ import tempfile
 import datetime
 from typing import Optional, List, Dict, Any
 from enum import Enum
+from pathlib import Path
 
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Query
+# Load environment variables from .env file
+from dotenv import load_dotenv
+
+# Find and load the .env file
+env_path = Path(__file__).parent.parent.parent / ".env"
+load_dotenv(env_path)
+
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Query, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from pydantic import BaseModel
@@ -31,6 +39,11 @@ from speecher import transcription
 
 # Import cloud wrappers for missing functions
 from backend import cloud_wrappers
+# Import streaming module for real-time transcription
+from backend.streaming import handle_websocket_streaming
+# Import API keys manager
+from backend.api_keys import APIKeysManager
+import uuid
 
 # Configuration from environment variables
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
@@ -38,16 +51,19 @@ MONGODB_DB = os.getenv("MONGODB_DB", "speecher")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "transcriptions")
 
 # Cloud provider configurations
-S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "speecher-transcriptions")
+# S3 bucket names are now configured per-provider in the database
 AZURE_STORAGE_ACCOUNT = os.getenv("AZURE_STORAGE_ACCOUNT")
 AZURE_STORAGE_KEY = os.getenv("AZURE_STORAGE_KEY")
 AZURE_CONTAINER_NAME = os.getenv("AZURE_CONTAINER_NAME", "speecher")
-GCP_BUCKET_NAME = os.getenv("GCP_BUCKET_NAME", "speecher-gcp")
+# GCS bucket names are now configured per-provider in the database
 
 # Initialize MongoDB client and collection
 mongo_client = MongoClient(MONGODB_URI)
 db = mongo_client[MONGODB_DB]
 collection = db[MONGODB_COLLECTION]
+
+# Initialize API Keys Manager
+api_keys_manager = APIKeysManager(MONGODB_URI, MONGODB_DB)
 
 class CloudProvider(str, Enum):
     AWS = "aws"
@@ -102,13 +118,21 @@ async def transcribe(
     - Azure Speech Services
     - Google Cloud Speech-to-Text
     """
-    # Validate file type
-    valid_types = ["audio/wav", "audio/mp3", "audio/mpeg", "audio/mp4", "audio/flac", "audio/x-m4a"]
-    if file.content_type not in valid_types:
+    # Validate file type - also check file extension as browsers sometimes send wrong content-type
+    valid_types = ["audio/wav", "audio/mp3", "audio/mpeg", "audio/mp4", "audio/flac", "audio/x-m4a", "audio/x-wav", "application/octet-stream"]
+    valid_extensions = [".wav", ".mp3", ".m4a", ".flac"]
+    
+    file_extension = os.path.splitext(file.filename)[1].lower()
+    
+    # Allow if either content-type is valid or extension is valid
+    if file.content_type not in valid_types and file_extension not in valid_extensions:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid file type {file.content_type}. Supported: WAV, MP3, M4A, FLAC"
+            detail=f"Invalid file type {file.content_type} or extension {file_extension}. Supported: WAV, MP3, M4A, FLAC"
         )
+    
+    # Log for debugging
+    print(f"File upload: {file.filename}, Content-Type: {file.content_type}, Extension: {file_extension}")
     
     # Save uploaded file to temporary location
     try:
@@ -122,10 +146,19 @@ async def transcribe(
     try:
         # Process based on selected provider
         if provider == CloudProvider.AWS.value:
-            result = await process_aws_transcription(
-                temp_file_path, file.filename, language,
-                enable_diarization, max_speakers
-            )
+            try:
+                result = await process_aws_transcription(
+                    temp_file_path, file.filename, language,
+                    enable_diarization, max_speakers
+                )
+            except Exception as e:
+                print(f"AWS Transcription Error: {e}")
+                print(f"Error type: {type(e)}")
+                import traceback
+                print("Full traceback:")
+                traceback.print_exc()
+                # Include more context in the error message
+                raise HTTPException(status_code=500, detail=f"AWS transcription failed: {str(e)}")
         elif provider == CloudProvider.AZURE.value:
             result = await process_azure_transcription(
                 temp_file_path, file.filename, language,
@@ -199,19 +232,55 @@ async def process_aws_transcription(
     enable_diarization: bool, max_speakers: Optional[int]
 ) -> Dict[str, Any]:
     """Process transcription using AWS Transcribe"""
-    if not S3_BUCKET_NAME:
-        raise ValueError("AWS S3 bucket not configured")
+    # Get API keys from database
+    api_keys = api_keys_manager.get_api_keys("aws")
+    if not api_keys:
+        raise HTTPException(status_code=400, detail="AWS provider is not configured")
+    
+    keys = api_keys.get("keys", {})
+    
+    # Debug logging
+    print(f"AWS Keys Debug: {list(keys.keys())}")
+    print(f"Has S3 bucket: {keys.get('s3_bucket_name')}")
+    
+    if not keys.get("access_key_id") or not keys.get("secret_access_key") or not keys.get("s3_bucket_name"):
+        missing = []
+        if not keys.get("access_key_id"): missing.append("access_key_id")
+        if not keys.get("secret_access_key"): missing.append("secret_access_key")
+        if not keys.get("s3_bucket_name"): missing.append("s3_bucket_name")
+        raise HTTPException(status_code=400, detail=f"AWS missing required fields: {', '.join(missing)}")
+    
+    # Set AWS credentials
+    os.environ["AWS_ACCESS_KEY_ID"] = keys["access_key_id"]
+    os.environ["AWS_SECRET_ACCESS_KEY"] = keys["secret_access_key"]
+    if keys.get("region"):
+        os.environ["AWS_DEFAULT_REGION"] = keys["region"]
+    
+    # Get S3 bucket name from configuration
+    s3_bucket_name = keys.get("s3_bucket_name")
+    if not s3_bucket_name:
+        raise HTTPException(status_code=400, detail="AWS S3 bucket name is not configured")
     
     # Upload to S3
-    if not aws_service.upload_file_to_s3(file_path, S3_BUCKET_NAME, filename):
+    print(f"Attempting to upload to S3 bucket: {s3_bucket_name}")
+    upload_result = aws_service.upload_file_to_s3(file_path, s3_bucket_name, filename)
+    print(f"Upload result: {upload_result}")
+    
+    # upload_file_to_s3 always returns a tuple (success, actual_bucket_name)
+    upload_success, actual_bucket_name = upload_result
+    
+    if not upload_success:
         raise Exception("Failed to upload file to S3")
+    
+    # Use the actual bucket name (might be different if original was taken)
+    bucket_name = actual_bucket_name
     
     # Start transcription job
     job_name = f"speecher-{uuid.uuid4()}"
     
     trans_resp = aws_service.start_transcription_job(
         job_name=job_name,
-        bucket_name=S3_BUCKET_NAME,
+        bucket_name=bucket_name,
         object_key=filename,
         language_code=language,
         max_speakers=max_speakers if enable_diarization else 1
@@ -222,18 +291,38 @@ async def process_aws_transcription(
     # Wait for completion
     job_info = aws_service.wait_for_job_completion(job_name)
     if not job_info:
-        raise Exception("AWS transcription job failed")
+        # Try to get more details about the failure
+        status_info = aws_service.get_transcription_job_status(job_name)
+        if status_info and status_info.get('TranscriptionJob'):
+            job_status = status_info.get('TranscriptionJob', {})
+            failure_reason = job_status.get('FailureReason', 'Unknown')
+            print(f"AWS transcription job failed. Status: {job_status.get('TranscriptionJobStatus')}, Reason: {failure_reason}")
+            raise Exception(f"AWS transcription job failed: {failure_reason}")
+        raise Exception("AWS transcription job failed - unable to get job details")
     
     # Download and process result
+    if not job_info or 'TranscriptionJob' not in job_info:
+        raise Exception("Job info is missing or invalid")
+    
+    if 'Transcript' not in job_info['TranscriptionJob']:
+        raise Exception(f"No transcript found in job. Job status: {job_info['TranscriptionJob'].get('TranscriptionJobStatus')}")
+    
     transcript_uri = job_info['TranscriptionJob']['Transcript']['TranscriptFileUri']
+    print(f"Downloading from URI: {transcript_uri}")
     transcription_data = aws_service.download_transcription_result(transcript_uri)
+    
+    if transcription_data is None:
+        raise Exception("Failed to download transcription result from AWS")
+    
+    print(f"Transcription data keys: {transcription_data.keys() if transcription_data else 'None'}")
     
     # Process with speaker diarization
     result = process_transcription_data(transcription_data, enable_diarization)
+    print(f"Processed result: {result}")
     
     # Clean up S3
     try:
-        aws_service.delete_file_from_s3(S3_BUCKET_NAME, filename)
+        aws_service.delete_file_from_s3(bucket_name, filename)
     except:
         pass
     
@@ -244,6 +333,20 @@ async def process_azure_transcription(
     enable_diarization: bool, max_speakers: Optional[int]
 ) -> Dict[str, Any]:
     """Process transcription using Azure Speech Services"""
+    # Get API keys from database
+    api_keys = api_keys_manager.get_api_keys("azure")
+    if not api_keys or not api_keys.get("enabled"):
+        raise HTTPException(status_code=400, detail="Azure provider is not configured or disabled")
+    
+    keys = api_keys.get("keys", {})
+    if not keys.get("subscription_key"):
+        raise HTTPException(status_code=400, detail="Azure subscription key is not configured")
+    
+    # Set Azure credentials
+    os.environ["AZURE_SPEECH_KEY"] = keys["subscription_key"]
+    if keys.get("region"):
+        os.environ["AZURE_SPEECH_REGION"] = keys["region"]
+    
     if not AZURE_STORAGE_ACCOUNT or not AZURE_STORAGE_KEY:
         raise ValueError("Azure storage not configured")
     
@@ -283,11 +386,32 @@ async def process_gcp_transcription(
     enable_diarization: bool, max_speakers: Optional[int]
 ) -> Dict[str, Any]:
     """Process transcription using Google Cloud Speech-to-Text"""
-    if not GCP_BUCKET_NAME:
-        raise ValueError("GCP bucket not configured")
+    # Get API keys from database
+    api_keys = api_keys_manager.get_api_keys("gcp")
+    if not api_keys or not api_keys.get("enabled"):
+        raise HTTPException(status_code=400, detail="GCP provider is not configured or disabled")
+    
+    keys = api_keys.get("keys", {})
+    if not keys.get("credentials_json") or not keys.get("gcs_bucket_name"):
+        raise HTTPException(status_code=400, detail="GCP credentials and bucket are not properly configured")
+    
+    # Set GCP credentials
+    import tempfile
+    
+    # Write credentials to temporary file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        f.write(keys["credentials_json"])
+        temp_cred_path = f.name
+    
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_cred_path
+    
+    # Get GCS bucket name from configuration
+    gcs_bucket_name = keys.get("gcs_bucket_name")
+    if not gcs_bucket_name:
+        raise HTTPException(status_code=400, detail="GCP bucket name is not configured")
     
     # Upload to GCS
-    gcs_uri = cloud_wrappers.upload_to_gcs(file_path, GCP_BUCKET_NAME, filename)
+    gcs_uri = cloud_wrappers.upload_to_gcs(file_path, gcs_bucket_name, filename)
     if not gcs_uri:
         raise Exception("Failed to upload file to Google Cloud Storage")
     
@@ -304,7 +428,7 @@ async def process_gcp_transcription(
     
     # Clean up GCS
     try:
-        cloud_wrappers.delete_from_gcs(GCP_BUCKET_NAME, filename)
+        cloud_wrappers.delete_from_gcs(gcs_bucket_name, filename)
     except:
         pass
     
@@ -383,6 +507,32 @@ async def health_check():
     """Health check endpoint."""
     return {"status": "healthy", "service": "Speecher API"}
 
+@app.get("/debug/aws-config")
+async def debug_aws_config():
+    """Debug endpoint to check AWS configuration."""
+    try:
+        raw_keys = api_keys_manager.get_api_keys("aws")
+        if not raw_keys:
+            return {"error": "No AWS configuration found"}
+        
+        # Check validation
+        is_valid = api_keys_manager.validate_provider_config("aws", raw_keys.get("keys", {}))
+        
+        return {
+            "raw_keys": {
+                "has_access_key": bool(raw_keys.get("keys", {}).get("access_key_id")),
+                "has_secret_key": bool(raw_keys.get("keys", {}).get("secret_access_key")),
+                "has_region": bool(raw_keys.get("keys", {}).get("region")),
+                "has_s3_bucket": bool(raw_keys.get("keys", {}).get("s3_bucket_name")),
+                "s3_bucket_value": raw_keys.get("keys", {}).get("s3_bucket_name", "NOT SET"),
+                "enabled_in_db": raw_keys.get("enabled"),
+            },
+            "is_valid": is_valid,
+            "provider_status": api_keys_manager.get_all_providers()
+        }
+    except Exception as e:
+        return {"error": str(e), "type": str(type(e))}
+
 @app.get("/db/health")
 async def database_health():
     """Check MongoDB connection."""
@@ -392,6 +542,11 @@ async def database_health():
         return {"status": "healthy", "database": "MongoDB connected"}
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Database unhealthy: {e}")
+
+@app.websocket("/ws/stream/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    """WebSocket endpoint for real-time audio streaming and transcription."""
+    await handle_websocket_streaming(websocket, client_id)
 
 @app.get("/stats")
 async def get_statistics():
@@ -429,14 +584,17 @@ def process_transcription_data(transcription_data: Dict[str, Any], enable_diariz
         "duration": 0.0
     }
     
-    # If we have the full transcription module function available
-    if hasattr(transcription, 'process_transcription_data'):
-        # Use the original function but adapt its output
-        transcription.process_transcription_data(transcription_data)
+    # Guard against None input
+    if not transcription_data:
+        print("WARNING: transcription_data is None or empty")
+        return result
     
     # Extract transcript text
     if 'results' in transcription_data:
-        results = transcription_data['results']
+        results = transcription_data.get('results')
+        if not results:
+            print("WARNING: 'results' key exists but is None or empty")
+            return result
         
         # Get transcript
         if 'transcripts' in results and results['transcripts']:
@@ -451,15 +609,75 @@ def process_transcription_data(transcription_data: Dict[str, Any], enable_diariz
         
         # Process speaker diarization if enabled
         if enable_diarization and 'speaker_labels' in results:
-            segments = results['speaker_labels'].get('segments', [])
-            for segment in segments:
-                speaker_data = {
-                    "speaker": f"Speaker {segment.get('speaker_label', 'Unknown')}",
-                    "text": "",
-                    "start_time": float(segment.get('start_time', 0)),
-                    "end_time": float(segment.get('end_time', 0))
-                }
-                result["speakers"].append(speaker_data)
+            # Use transcription module to properly process speaker segments
+            from speecher import transcription
+            
+            # Process the full transcription data with speaker segments
+            processed_segments = []
+            try:
+                # Call the transcription module's processing function
+                success = transcription.process_transcription_result(
+                    transcription_data, 
+                    output_file=None,
+                    include_timestamps=True
+                )
+                
+                # Now extract the segments properly
+                segments = results['speaker_labels'].get('segments', [])
+                items = results.get('items', [])
+                
+                # Group items by speaker segments
+                for segment in segments:
+                    speaker_label = segment.get('speaker_label', 'Unknown')
+                    segment_start = float(segment.get('start_time', 0))
+                    segment_end = float(segment.get('end_time', 0))
+                    
+                    # Collect words for this segment
+                    segment_words = []
+                    for item in items:
+                        if item.get('start_time') and item.get('end_time'):
+                            item_start = float(item['start_time'])
+                            item_end = float(item['end_time'])
+                            
+                            # Check if item is within this segment
+                            if segment_start <= item_start and item_end <= segment_end:
+                                if item.get('alternatives'):
+                                    content = item['alternatives'][0].get('content', '')
+                                    segment_words.append(content)
+                                    
+                                    # Check for punctuation following this item
+                                    item_index = items.index(item)
+                                    if item_index + 1 < len(items):
+                                        next_item = items[item_index + 1]
+                                        if next_item.get('type') == 'punctuation':
+                                            punct = next_item['alternatives'][0].get('content', '')
+                                            segment_words[-1] += punct
+                    
+                    # Join words into text
+                    segment_text = ' '.join(segment_words)
+                    segment_text = ' '.join(segment_text.split())  # Clean up spaces
+                    
+                    if segment_text:
+                        speaker_data = {
+                            "speaker": f"Speaker {speaker_label}",
+                            "text": segment_text,
+                            "start_time": segment_start,
+                            "end_time": segment_end
+                        }
+                        result["speakers"].append(speaker_data)
+                        
+            except Exception as e:
+                print(f"Error processing speaker segments: {e}")
+                # Fallback to simple segments without text
+                segments = results['speaker_labels'].get('segments', [])
+                for segment in segments:
+                    speaker_data = {
+                        "speaker": f"Speaker {segment.get('speaker_label', 'Unknown')}",
+                        "text": "",
+                        "start_time": float(segment.get('start_time', 0)),
+                        "end_time": float(segment.get('end_time', 0))
+                    }
+                    result["speakers"].append(speaker_data)
         
         # Calculate duration from the last item or segment
         if 'items' in results and results['items']:
@@ -501,6 +719,74 @@ def calculate_cost(provider: str, duration_seconds: float) -> float:
     }
     
     return costs.get(provider, 0.02) * duration_minutes
+
+# API Keys Management Endpoints
+class APIKeyRequest(BaseModel):
+    provider: str
+    keys: Dict[str, Any]
+
+@app.post("/api/keys/{provider}")
+async def save_api_keys(provider: str, request: APIKeyRequest):
+    """Save or update API keys for a provider."""
+    success = api_keys_manager.save_api_keys(provider, request.keys)
+    if success:
+        return {"status": "success", "message": f"API keys for {provider} saved successfully"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to save API keys")
+
+@app.get("/api/keys/{provider}")
+async def get_api_keys(provider: str):
+    """Get API keys for a provider (masked for security)."""
+    keys_data = api_keys_manager.get_api_keys(provider)
+    if keys_data:
+        # Mask sensitive values for security
+        masked_keys = {}
+        for key, value in keys_data.get("keys", {}).items():
+            if value and any(sensitive in key.lower() for sensitive in ['key', 'secret', 'token']):
+                # Show only first and last 4 characters
+                if len(str(value)) > 8:
+                    masked_keys[key] = f"{str(value)[:4]}...{str(value)[-4:]}"
+                else:
+                    masked_keys[key] = "****"
+            else:
+                masked_keys[key] = value
+        
+        return {
+            "provider": keys_data["provider"],
+            "keys": masked_keys,
+            "enabled": keys_data.get("enabled", True),
+            "configured": True
+        }
+    else:
+        return {
+            "provider": provider,
+            "keys": {},
+            "enabled": False,
+            "configured": False
+        }
+
+@app.get("/api/keys")
+async def get_all_providers():
+    """Get all providers with their configuration status."""
+    return api_keys_manager.get_all_providers()
+
+@app.delete("/api/keys/{provider}")
+async def delete_api_keys(provider: str):
+    """Delete API keys for a provider."""
+    success = api_keys_manager.delete_api_keys(provider)
+    if success:
+        return {"status": "success", "message": f"API keys for {provider} deleted"}
+    else:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+@app.put("/api/keys/{provider}/toggle")
+async def toggle_provider(provider: str, enabled: bool = True):
+    """Enable or disable a provider."""
+    success = api_keys_manager.toggle_provider(provider, enabled)
+    if success:
+        return {"status": "success", "enabled": enabled}
+    else:
+        raise HTTPException(status_code=404, detail="Provider not found")
 
 if __name__ == "__main__":
     import uvicorn

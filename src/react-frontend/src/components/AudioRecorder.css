@@ -1,0 +1,177 @@
+.audio-recorder {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.recorder-controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+}
+
+.record-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 2rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: white;
+}
+
+.record-btn.start {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+.record-btn.start:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+}
+
+.record-btn.stop {
+  background: linear-gradient(135deg, #f56565 0%, #ed8936 100%);
+}
+
+.record-btn.stop:hover {
+  transform: scale(1.05);
+  box-shadow: 0 10px 30px rgba(245, 101, 101, 0.4);
+}
+
+.record-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.recording-indicator {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: #fee;
+  border-radius: 2rem;
+  color: #c53030;
+  font-weight: 600;
+}
+
+.pulse {
+  width: 12px;
+  height: 12px;
+  background: #f56565;
+  border-radius: 50%;
+  animation: pulse-animation 1.5s infinite;
+}
+
+@keyframes pulse-animation {
+  0% {
+    box-shadow: 0 0 0 0 rgba(245, 101, 101, 0.7);
+  }
+  70% {
+    box-shadow: 0 0 0 20px rgba(245, 101, 101, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 101, 101, 0);
+  }
+}
+
+.timer {
+  font-family: 'Courier New', monospace;
+  font-size: 1.1rem;
+}
+
+.playback-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  width: 100%;
+  padding: 1rem;
+  background: #f7fafc;
+  border-radius: 1rem;
+}
+
+.control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  color: #4a5568;
+}
+
+.control-btn:hover {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+.waveform {
+  flex: 1;
+  min-width: 200px;
+  margin: 0 1rem;
+}
+
+.duration {
+  font-family: 'Courier New', monospace;
+  color: #4a5568;
+  font-weight: 600;
+  min-width: 60px;
+  text-align: center;
+}
+
+.submit-btn {
+  padding: 0.75rem 2rem;
+  background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+  color: white;
+  border: none;
+  border-radius: 2rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-left: auto;
+}
+
+.submit-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 10px 30px rgba(72, 187, 120, 0.4);
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.recording-tips {
+  background: #f0fff4;
+  border-left: 4px solid #48bb78;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  color: #276749;
+}
+
+.recording-tips p {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 768px) {
+  .playback-controls {
+    flex-wrap: wrap;
+  }
+  
+  .waveform {
+    width: 100%;
+    order: -1;
+    margin: 0 0 1rem 0;
+  }
+}

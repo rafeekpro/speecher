@@ -1,79 +1,133 @@
 version: '3.8'
 
 services:
-  mongo:
-    image: mongo:6.0
-    restart: always
+  mongodb:
+    image: mongo:7.0
+    container_name: speecher-mongodb
+    restart: unless-stopped
     ports:
       - "27017:27017"
     environment:
-      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USERNAME:-admin}
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-password}
-      - MONGO_INITDB_DATABASE=speecher
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: speecher_admin_pass
+      MONGO_INITDB_DATABASE: speecher
     volumes:
-      - mongo-data:/data/db
+      - mongodb_data:/data/db
+      - ./docker/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/speecher --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     networks:
       - speecher-network
 
   backend:
     build:
       context: .
-      dockerfile: Dockerfile
-    restart: always
+      dockerfile: docker/backend.Dockerfile
+    container_name: speecher-backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
       # MongoDB configuration
-      - MONGODB_URI=mongodb://${MONGO_USERNAME:-admin}:${MONGO_PASSWORD:-password}@mongo:27017/speecher?authSource=admin
-      - MONGODB_DB=${MONGODB_DB:-speecher}
-      - MONGODB_COLLECTION=${MONGODB_COLLECTION:-transcriptions}
+      MONGODB_URI: mongodb://speecher_user:speecher_pass@mongodb:27017/speecher?authSource=speecher
+      MONGODB_DB: speecher
+      MONGODB_COLLECTION: transcriptions
       
-      # AWS configuration
-      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
-      - S3_BUCKET_NAME=${S3_BUCKET_NAME:-speecher-transcriptions}
+      # AWS Configuration
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      S3_BUCKET_NAME: ${S3_BUCKET_NAME:-speecher-audio}
       
-      # Azure configuration
-      - AZURE_STORAGE_ACCOUNT=${AZURE_STORAGE_ACCOUNT}
-      - AZURE_STORAGE_KEY=${AZURE_STORAGE_KEY}
-      - AZURE_CONTAINER_NAME=${AZURE_CONTAINER_NAME:-speecher}
-      - AZURE_SPEECH_KEY=${AZURE_SPEECH_KEY}
-      - AZURE_SPEECH_REGION=${AZURE_SPEECH_REGION:-eastus}
+      # Azure Configuration
+      AZURE_STORAGE_ACCOUNT: ${AZURE_STORAGE_ACCOUNT:-}
+      AZURE_STORAGE_KEY: ${AZURE_STORAGE_KEY:-}
+      AZURE_CONTAINER_NAME: ${AZURE_CONTAINER_NAME:-speecher}
+      AZURE_SPEECH_KEY: ${AZURE_SPEECH_KEY:-}
+      AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION:-eastus}
       
-      # GCP configuration
-      - GCP_PROJECT_ID=${GCP_PROJECT_ID}
-      - GCP_BUCKET_NAME=${GCP_BUCKET_NAME:-speecher-gcp}
-      - GOOGLE_APPLICATION_CREDENTIALS=/app/gcp-credentials.json
+      # Google Cloud Configuration
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GCP_BUCKET_NAME: ${GCP_BUCKET_NAME:-speecher-gcp}
+      GCP_CREDENTIALS_FILE: ${GCP_CREDENTIALS_FILE:-}
+      
+      # Application settings
+      PYTHONUNBUFFERED: 1
+      ENVIRONMENT: docker
       
     volumes:
+      # Mount source code for hot-reload - changes will be reflected immediately
       - ./src:/app/src:ro
-      - ${GCP_CREDENTIALS_FILE:-./gcp-credentials.json}:/app/gcp-credentials.json:ro
+      - ./tests:/app/tests:ro
+      # Mount for temporary files
+      - /tmp:/tmp
     depends_on:
-      - mongo
+      mongodb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - speecher-network
+    command: ["uvicorn", "src.backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   frontend:
     build:
-      context: ./src/frontend
-      dockerfile: Dockerfile
-    restart: always
+      context: .
+      dockerfile: docker/react.Dockerfile
+    container_name: speecher-react
+    restart: unless-stopped
     ports:
-      - "8501:8501"
+      - "3000:80"
     environment:
-      - BACKEND_URL=http://backend:8000
-      - STREAMLIT_THEME_PRIMARY_COLOR=${THEME_PRIMARY_COLOR:-#FF4B4B}
-      - STREAMLIT_THEME_BACKGROUND_COLOR=${THEME_BACKGROUND_COLOR:-#FFFFFF}
-      - STREAMLIT_THEME_SECONDARY_BACKGROUND_COLOR=${THEME_SECONDARY_BACKGROUND_COLOR:-#F0F2F6}
-      - STREAMLIT_THEME_TEXT_COLOR=${THEME_TEXT_COLOR:-#262730}
+      REACT_APP_API_URL: http://localhost:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     networks:
       - speecher-network
 
+  # Test runner service - run with: docker-compose --profile test up test-runner
+  test-runner:
+    build:
+      context: .
+      dockerfile: docker/test.Dockerfile
+    container_name: speecher-tests
+    environment:
+      MONGODB_URI: mongodb://speecher_user:speecher_pass@mongodb:27017/speecher_test?authSource=speecher
+      MONGODB_DB: speecher_test
+      BACKEND_URL: http://backend:8000
+      PYTHONUNBUFFERED: 1
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+      - ./test_results:/app/test_results
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - speecher-network
+    profiles:
+      - test  # Only run when explicitly requested
+    command: ["pytest", "tests/", "-v", "--tb=short", "--junit-xml=/app/test_results/results.xml"]
+
 volumes:
-  mongo-data:
+  mongodb_data:
     driver: local
 
 networks:
