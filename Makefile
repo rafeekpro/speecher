@@ -90,7 +90,7 @@ db-shell: ## Connect to MongoDB shell
 	docker exec -it speecher-mongodb mongosh
 
 db-backup: ## Backup MongoDB database
-	docker exec speecher-mongodb mongodump --out /backup/$(shell date +%Y%m%d_%H%M%S)
+	docker exec speecher-mongodb sh -c 'mkdir -p /backup && mongodump --out /backup/$(date +%Y%m%d_%H%M%S)'
 
 # Cleanup
 clean: ## Remove generated files and caches
