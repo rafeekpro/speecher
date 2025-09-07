@@ -55,7 +55,6 @@ Makefile
 
 # Development scripts
 scripts/dev/devmanager.py
-dm
 
 # Logs
 *.log
