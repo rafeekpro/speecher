@@ -526,3 +526,4 @@ class TestErrorHandling:
             )
             
             assert response.status_code == 500
+# Force CI re-run
