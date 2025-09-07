@@ -9,6 +9,7 @@ import uuid
 import os
 from unittest.mock import patch, MagicMock
 from pathlib import Path
+from botocore.exceptions import ClientError
 
 # Import test utilities
 from tests.test_utils import (
@@ -58,22 +59,30 @@ class TestAWSModule(unittest.TestCase):
         """Test creating S3 bucket in us-east-1 region"""
         mock_s3 = create_mock_s3_client()
         mock_s3.meta.region_name = "us-east-1"
+        mock_s3.head_bucket.side_effect = ClientError(
+            {"Error": {"Code": "404", "Message": "Not Found"}},
+            "HeadBucket"
+        )
         mock_boto_client.return_value = mock_s3
         
         result = aws.create_s3_bucket(self.bucket_name, region="us-east-1")
         
-        self.assertTrue(result)
+        self.assertEqual(result, self.bucket_name)
         mock_s3.create_bucket.assert_called_once_with(Bucket=self.bucket_name)
     
     @patch('boto3.client')
     def test_create_s3_bucket_non_us_east_1(self, mock_boto_client):
         """Test creating S3 bucket in a region other than us-east-1"""
         mock_s3 = create_mock_s3_client()
+        mock_s3.head_bucket.side_effect = ClientError(
+            {"Error": {"Code": "404", "Message": "Not Found"}},
+            "HeadBucket"
+        )
         mock_boto_client.return_value = mock_s3
         
         result = aws.create_s3_bucket(self.bucket_name, region="eu-central-1")
         
-        self.assertTrue(result)
+        self.assertEqual(result, self.bucket_name)
         mock_s3.create_bucket.assert_called_once_with(
             Bucket=self.bucket_name,
             CreateBucketConfiguration={'LocationConstraint': 'eu-central-1'}
@@ -85,15 +94,19 @@ class TestAWSModule(unittest.TestCase):
         from botocore.exceptions import ClientError
         
         mock_s3 = create_mock_s3_client()
+        mock_s3.head_bucket.side_effect = ClientError(
+            {"Error": {"Code": "404", "Message": "Not Found"}},
+            "HeadBucket"
+        )
         mock_s3.create_bucket.side_effect = ClientError(
-            {"Error": {"Code": "BucketAlreadyExists", "Message": "Bucket already exists"}},
+            {"Error": {"Code": "AccessDenied", "Message": "Access Denied"}},
             "CreateBucket"
         )
         mock_boto_client.return_value = mock_s3
         
         result = aws.create_s3_bucket(self.bucket_name)
         
-        self.assertFalse(result)
+        self.assertIsNone(result)
     
     @patch('boto3.client')
     def test_upload_file_to_s3(self, mock_boto_client):
