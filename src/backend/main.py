@@ -15,10 +15,10 @@ from enum import Enum
 from pathlib import Path
 
 # Load environment variables from .env file
-from dotenv import load_dotenv
+from dotenv import load_dotenv, find_dotenv
 
-# Find and load the .env file
-env_path = Path(__file__).parent.parent.parent / ".env"
+# Load the .env file from a path specified in DOTENV_PATH, or search for it
+env_path = os.getenv("DOTENV_PATH") or find_dotenv()
 load_dotenv(env_path)
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Query, WebSocket
