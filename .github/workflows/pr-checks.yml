@@ -8,6 +8,13 @@ on:
 env:
   PYTHON_VERSION: '3.11'
 
+# Permissions needed for the workflow
+permissions:
+  contents: read
+  pull-requests: read
+  checks: write
+  issues: read
+
 # Cancel previous runs for the same PR
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -23,9 +30,17 @@ jobs:
       tests: ${{ steps.filter.outputs.tests }}
     steps:
     - uses: actions/checkout@v4
-    - uses: dorny/paths-filter@v2
-      id: filter
       with:
+        # Fetch all history for all branches and tags
+        fetch-depth: 0
+    
+    - name: Detect changed files
+      uses: dorny/paths-filter@v2
+      id: filter
+      continue-on-error: true
+      with:
+        # Use local git history instead of GitHub API to avoid timeouts
+        base: ${{ github.event.pull_request.base.ref }}
         filters: |
           backend:
             - 'src/backend/**'
@@ -34,7 +49,8 @@ jobs:
             - 'requirements*.txt'
             - 'pyproject.toml'
           frontend:
-            - 'src/frontend/**'
+            - 'src/react-frontend/**'
+            - 'docker/react.Dockerfile'
           tests:
             - 'tests/**'
             - 'run_api_tests.sh'
@@ -44,7 +60,12 @@ jobs:
     name: 🧪 Run All Tests
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.tests == 'true'
+    # Run tests if backend/tests changed OR if path detection failed (fail-safe)
+    if: |
+      always() && 
+      (needs.changes.outputs.backend == 'true' || 
+       needs.changes.outputs.tests == 'true' || 
+       needs.changes.result == 'failure')
     
     services:
       mongodb:
@@ -139,7 +160,12 @@ jobs:
     name: 🎨 Code Quality
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
+    # Run if backend/frontend changed OR if path detection failed
+    if: |
+      always() &&
+      (needs.changes.outputs.backend == 'true' || 
+       needs.changes.outputs.frontend == 'true' ||
+       needs.changes.result == 'failure')
     
     steps:
     - name: 📥 Checkout code
@@ -212,7 +238,12 @@ jobs:
     name: 🐳 Docker Build Test
     runs-on: ubuntu-latest
     needs: changes
-    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.frontend == 'true'
+    # Run if backend/frontend changed OR if path detection failed
+    if: |
+      always() &&
+      (needs.changes.outputs.backend == 'true' || 
+       needs.changes.outputs.frontend == 'true' ||
+       needs.changes.result == 'failure')
     
     steps:
     - name: 📥 Checkout code
@@ -227,7 +258,7 @@ jobs:
     
     - name: 🏗️ Build Frontend Docker image
       run: |
-        docker build -t speecher-frontend:pr-${{ github.event.pull_request.number }} ./src/frontend
+        docker build -f docker/react.Dockerfile -t speecher-frontend:pr-${{ github.event.pull_request.number }} .
     
     - name: 🧪 Test Docker Compose configuration
       run: |

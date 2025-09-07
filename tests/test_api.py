@@ -76,7 +76,7 @@ class TestTranscribeEndpoint:
              patch('backend.main.aws_service.delete_file_from_s3') as mock_delete, \
              patch('backend.main.process_transcription_data') as mock_process:
             
-            mock_upload.return_value = True
+            mock_upload.return_value = (True, "test-bucket")  # Returns tuple (success, bucket_name)
             mock_start.return_value = {"JobName": "test-job"}
             mock_wait.return_value = {
                 'TranscriptionJob': {
@@ -105,10 +105,22 @@ class TestTranscribeEndpoint:
                 "process": mock_process
             }
     
+    @patch('backend.main.api_keys_manager')
     @patch('backend.main.collection')
-    def test_transcribe_aws_success(self, mock_collection, mock_aws_functions, audio_file):
+    def test_transcribe_aws_success(self, mock_collection, mock_api_keys, mock_aws_functions, audio_file):
         """Test successful AWS transcription"""
         mock_collection.insert_one.return_value = Mock(inserted_id=ObjectId())
+        
+        # Mock API keys configuration
+        mock_api_keys.get_api_keys.return_value = {
+            "keys": {
+                "access_key_id": "test_key",
+                "secret_access_key": "test_secret",
+                "s3_bucket_name": "test-bucket",
+                "region": "us-east-1"
+            },
+            "source": "test"
+        }
         
         response = client.post(
             "/transcribe",
@@ -179,11 +191,22 @@ class TestTranscribeEndpoint:
         assert data["provider"] == "azure"
         assert data["transcript"] == "Azure transcription"
     
+    @patch('backend.main.api_keys_manager')
     @patch('backend.main.collection')
     @patch('backend.main.cloud_wrappers')
-    def test_transcribe_gcp_success(self, mock_wrappers, mock_collection, audio_file):
+    def test_transcribe_gcp_success(self, mock_wrappers, mock_collection, mock_api_keys, audio_file):
         """Test successful GCP transcription"""
         mock_collection.insert_one.return_value = Mock(inserted_id=ObjectId())
+        
+        # Mock API keys configuration
+        mock_api_keys.get_api_keys.return_value = {
+            "keys": {
+                "credentials_json": '{}',
+                "gcs_bucket_name": "test-bucket"
+            },
+            "source": "test",
+            "enabled": True  # Add enabled flag
+        }
         
         # Mock GCP functions
         mock_wrappers.upload_to_gcs.return_value = "gs://bucket/file"
@@ -456,10 +479,22 @@ class TestTimestampFormatting:
 class TestErrorHandling:
     """Test error handling scenarios"""
     
+    @patch('backend.main.api_keys_manager')
     @patch('backend.main.aws_service.upload_file_to_s3')
-    def test_aws_upload_failure(self, mock_upload):
+    def test_aws_upload_failure(self, mock_upload, mock_api_keys):
         """Test handling of AWS upload failure"""
-        mock_upload.return_value = False
+        # Mock API keys to pass configuration check
+        mock_api_keys.get_api_keys.return_value = {
+            "keys": {
+                "access_key_id": "test_key",
+                "secret_access_key": "test_secret",
+                "s3_bucket_name": "test-bucket",
+                "region": "us-east-1"
+            },
+            "source": "test"
+        }
+        
+        mock_upload.return_value = (False, None)  # Returns tuple (success, bucket_name)
         
         audio_file = io.BytesIO(b"fake audio")
         response = client.post(
@@ -491,3 +526,4 @@ class TestErrorHandling:
             )
             
             assert response.status_code == 500
+# Force CI re-run

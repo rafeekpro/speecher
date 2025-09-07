@@ -36,26 +36,57 @@ def create_s3_bucket(bucket_name, region=None):
         region: Region AWS, domyślnie używa regionu z konfiguracji
         
     Returns:
-        bool: True jeśli bucket został utworzony, False w przypadku błędu
+        str|None: Nazwa utworzonego bucketu lub None w przypadku błędu
     """
     try:
         s3_client = boto3.client('s3', region_name=region)
         if region is None:
-            region = s3_client.meta.region_name
+            region = os.getenv('AWS_DEFAULT_REGION', 'us-east-1')
             
-        # Tworzymy bucket - dla regionów innych niż us-east-1 musimy podać LocationConstraint
-        if region == 'us-east-1':
-            response = s3_client.create_bucket(Bucket=bucket_name)
-        else:
-            response = s3_client.create_bucket(
-                Bucket=bucket_name,
-                CreateBucketConfiguration={'LocationConstraint': region}
-            )
-        logger.info(f"Bucket {bucket_name} został utworzony w regionie {region}")
-        return True
+        # Sprawdź czy bucket już istnieje
+        try:
+            s3_client.head_bucket(Bucket=bucket_name)
+            logger.info(f"Bucket {bucket_name} już istnieje")
+            return bucket_name
+        except ClientError as e:
+            if e.response['Error']['Code'] != '404':
+                logger.error(f"Błąd podczas sprawdzania bucketu: {e}")
+                return None
+        
+        # Jeśli bucket już istnieje ale należy do kogoś innego, spróbuj z unikalną nazwą
+        original_bucket_name = bucket_name
+        attempts = 0
+        max_attempts = 5
+        
+        while attempts < max_attempts:
+            try:
+                # Tworzymy bucket - dla regionów innych niż us-east-1 musimy podać LocationConstraint
+                if region == 'us-east-1':
+                    response = s3_client.create_bucket(Bucket=bucket_name)
+                else:
+                    response = s3_client.create_bucket(
+                        Bucket=bucket_name,
+                        CreateBucketConfiguration={'LocationConstraint': region}
+                    )
+                logger.info(f"Bucket {bucket_name} został utworzony w regionie {region}")
+                return bucket_name
+            except ClientError as e:
+                error_code = e.response['Error']['Code']
+                if error_code in ['BucketAlreadyExists', 'BucketAlreadyOwnedByYou']:
+                    attempts += 1
+                    # Dodaj losowy suffix do nazwy
+                    unique_suffix = str(uuid.uuid4())[:8]
+                    bucket_name = f"{original_bucket_name}-{unique_suffix}"
+                    logger.info(f"Bucket name taken, trying: {bucket_name}")
+                else:
+                    logger.error(f"Błąd podczas tworzenia bucketu: {e}")
+                    return None
+        
+        logger.error(f"Nie udało się utworzyć bucketu po {max_attempts} próbach")
+        return None
     except ClientError as e:
         logger.error(f"Błąd podczas tworzenia bucketu: {e}")
-        return False
+        return None
 
 
 def upload_file_to_s3(file_path, bucket_name, object_name=None):
@@ -68,19 +99,36 @@ def upload_file_to_s3(file_path, bucket_name, object_name=None):
         object_name: Nazwa obiektu w S3 (jeśli None, używa nazwy pliku)
         
     Returns:
-        bool: True jeśli plik został wgrany, False w przypadku błędu
+        tuple: (bool, str) - (success, actual_bucket_name) or (False, None) w przypadku błędu
     """
     if object_name is None:
         object_name = os.path.basename(file_path)
 
     try:
         s3_client = boto3.client('s3')
+        
+        # Check if bucket exists, create if it doesn't
+        try:
+            s3_client.head_bucket(Bucket=bucket_name)
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            if error_code == '404':
+                logger.info(f"Bucket {bucket_name} doesn't exist, creating it...")
+                created_bucket_name = create_s3_bucket(bucket_name)
+                if not created_bucket_name:
+                    logger.error(f"Failed to create bucket {bucket_name}")
+                    return (False, None)
+                # Update bucket name if it was changed during creation
+                bucket_name = created_bucket_name
+            else:
+                raise e
+        
         s3_client.upload_file(file_path, bucket_name, object_name)
         logger.info(f"Plik {file_path} został wgrany do bucketu {bucket_name} jako {object_name}")
-        return True
+        return (True, bucket_name)
     except ClientError as e:
         logger.error(f"Błąd podczas wgrywania pliku: {e}")
-        return False
+        return (False, None)
 
 
 def start_transcription_job(job_name, bucket_name, object_key, language_code="pl-PL", max_speakers=5):
@@ -142,20 +190,28 @@ def get_transcription_job_status(job_name):
         return None
 
 
-def wait_for_job_completion(job_name, poll_interval=30):
+def wait_for_job_completion(job_name, poll_interval=5, max_wait_time=300):
     """
     Czeka na zakończenie zadania transkrypcji sprawdzając jego status okresowo.
     
     Args:
         job_name: Nazwa zadania transkrypcji
-        poll_interval: Czas w sekundach między kolejnymi sprawdzeniami
+        poll_interval: Czas w sekundach między kolejnymi sprawdzeniami (domyślnie 5s)
+        max_wait_time: Maksymalny czas oczekiwania w sekundach (domyślnie 5 minut)
         
     Returns:
         dict: Informacje o zakończonym zadaniu lub None w przypadku błędu
     """
     logger.info(f"Oczekiwanie na zakończenie zadania transkrypcji {job_name}...")
     
+    start_time = time.time()
+    
     while True:
+        # Check if we've exceeded max wait time
+        if time.time() - start_time > max_wait_time:
+            logger.error(f"Timeout: Zadanie {job_name} nie zakończyło się w ciągu {max_wait_time} sekund")
+            return None
+            
         job_info = get_transcription_job_status(job_name)
         
         if job_info is None:
@@ -186,6 +242,7 @@ def download_transcription_result(transcript_url):
         dict: Dane transkrypcji w formacie JSON lub None w przypadku błędu
     """
     try:
+        logger.info(f"Downloading transcription result from: {transcript_url}")
         response = requests.get(transcript_url)
         response.raise_for_status()  # Zgłosi wyjątek dla błędów HTTP
         
@@ -193,6 +250,7 @@ def download_transcription_result(transcript_url):
         return response.json()
     except requests.exceptions.RequestException as e:
         logger.error(f"Błąd podczas pobierania wyników transkrypcji: {e}")
+        logger.error(f"URL: {transcript_url}")
         return None
 
 
