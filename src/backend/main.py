@@ -10,9 +10,14 @@ import json
 import shutil
 import tempfile
 import datetime
+import logging
 from typing import Optional, List, Dict, Any
 from enum import Enum
 from pathlib import Path
+
+# Configure logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 # Load environment variables from .env file
 from dotenv import load_dotenv, find_dotenv
@@ -132,7 +137,7 @@ async def transcribe(
         )
     
     # Log for debugging
-    print(f"File upload: {file.filename}, Content-Type: {file.content_type}, Extension: {file_extension}")
+    logger.info(f"File upload: {file.filename}, Content-Type: {file.content_type}, Extension: {file_extension}")
     
     # Save uploaded file to temporary location
     try:
@@ -152,11 +157,10 @@ async def transcribe(
                     enable_diarization, max_speakers
                 )
             except Exception as e:
-                print(f"AWS Transcription Error: {e}")
-                print(f"Error type: {type(e)}")
+                logger.error(f"AWS Transcription Error: {e}")
+                logger.error(f"Error type: {type(e)}")
                 import traceback
-                print("Full traceback:")
-                traceback.print_exc()
+                logger.error("Full traceback:", exc_info=True)
                 # Include more context in the error message
                 raise HTTPException(status_code=500, detail=f"AWS transcription failed: {str(e)}")
         elif provider == CloudProvider.AZURE.value:
@@ -240,8 +244,8 @@ async def process_aws_transcription(
     keys = api_keys.get("keys", {})
     
     # Debug logging
-    print(f"AWS Keys Debug: {list(keys.keys())}")
-    print(f"Has S3 bucket: {keys.get('s3_bucket_name')}")
+    logger.debug(f"AWS Keys Debug: {list(keys.keys())}")
+    logger.debug(f"Has S3 bucket: {keys.get('s3_bucket_name')}")
     
     if not keys.get("access_key_id") or not keys.get("secret_access_key") or not keys.get("s3_bucket_name"):
         missing = []
@@ -262,9 +266,9 @@ async def process_aws_transcription(
         raise HTTPException(status_code=400, detail="AWS S3 bucket name is not configured")
     
     # Upload to S3
-    print(f"Attempting to upload to S3 bucket: {s3_bucket_name}")
+    logger.info(f"Attempting to upload to S3 bucket: {s3_bucket_name}")
     upload_result = aws_service.upload_file_to_s3(file_path, s3_bucket_name, filename)
-    print(f"Upload result: {upload_result}")
+    logger.debug(f"Upload result: {upload_result}")
     
     # upload_file_to_s3 always returns a tuple (success, actual_bucket_name)
     upload_success, actual_bucket_name = upload_result
@@ -296,7 +300,7 @@ async def process_aws_transcription(
         if status_info and status_info.get('TranscriptionJob'):
             job_status = status_info.get('TranscriptionJob', {})
             failure_reason = job_status.get('FailureReason', 'Unknown')
-            print(f"AWS transcription job failed. Status: {job_status.get('TranscriptionJobStatus')}, Reason: {failure_reason}")
+            logger.error(f"AWS transcription job failed. Status: {job_status.get('TranscriptionJobStatus')}, Reason: {failure_reason}")
             raise Exception(f"AWS transcription job failed: {failure_reason}")
         raise Exception("AWS transcription job failed - unable to get job details")
     
@@ -308,17 +312,17 @@ async def process_aws_transcription(
         raise Exception(f"No transcript found in job. Job status: {job_info['TranscriptionJob'].get('TranscriptionJobStatus')}")
     
     transcript_uri = job_info['TranscriptionJob']['Transcript']['TranscriptFileUri']
-    print(f"Downloading from URI: {transcript_uri}")
+    logger.info(f"Downloading from URI: {transcript_uri}")
     transcription_data = aws_service.download_transcription_result(transcript_uri)
     
     if transcription_data is None:
         raise Exception("Failed to download transcription result from AWS")
     
-    print(f"Transcription data keys: {transcription_data.keys() if transcription_data else 'None'}")
+    logger.debug(f"Transcription data keys: {transcription_data.keys() if transcription_data else 'None'}")
     
     # Process with speaker diarization
     result = process_transcription_data(transcription_data, enable_diarization)
-    print(f"Processed result: {result}")
+    logger.debug(f"Processed result: {result}")
     
     # Clean up S3
     try:
@@ -586,14 +590,14 @@ def process_transcription_data(transcription_data: Dict[str, Any], enable_diariz
     
     # Guard against None input
     if not transcription_data:
-        print("WARNING: transcription_data is None or empty")
+        logger.warning("transcription_data is None or empty")
         return result
     
     # Extract transcript text
     if 'results' in transcription_data:
         results = transcription_data.get('results')
         if not results:
-            print("WARNING: 'results' key exists but is None or empty")
+            logger.warning("'results' key exists but is None or empty")
             return result
         
         # Get transcript
@@ -667,7 +671,7 @@ def process_transcription_data(transcription_data: Dict[str, Any], enable_diariz
                         result["speakers"].append(speaker_data)
                         
             except Exception as e:
-                print(f"Error processing speaker segments: {e}")
+                logger.error(f"Error processing speaker segments: {e}")
                 # Fallback to simple segments without text
                 segments = results['speaker_labels'].get('segments', [])
                 for segment in segments:
