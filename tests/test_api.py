@@ -76,7 +76,7 @@ class TestTranscribeEndpoint:
              patch('backend.main.aws_service.delete_file_from_s3') as mock_delete, \
              patch('backend.main.process_transcription_data') as mock_process:
             
-            mock_upload.return_value = True
+            mock_upload.return_value = (True, "test-bucket")  # Returns tuple (success, bucket_name)
             mock_start.return_value = {"JobName": "test-job"}
             mock_wait.return_value = {
                 'TranscriptionJob': {
@@ -204,7 +204,8 @@ class TestTranscribeEndpoint:
                 "credentials_json": '{}',
                 "gcs_bucket_name": "test-bucket"
             },
-            "source": "test"
+            "source": "test",
+            "enabled": True  # Add enabled flag
         }
         
         # Mock GCP functions
@@ -493,7 +494,7 @@ class TestErrorHandling:
             "source": "test"
         }
         
-        mock_upload.return_value = False
+        mock_upload.return_value = (False, None)  # Returns tuple (success, bucket_name)
         
         audio_file = io.BytesIO(b"fake audio")
         response = client.post(
