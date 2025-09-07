@@ -38,6 +38,11 @@ class DevManager:
         self.mongodb_uri = "mongodb://localhost:27017"
         self.docker_compose_cmd = None  # Will be set after checking
         
+        # Container names - can be overridden via environment or docker-compose.yml
+        self.mongodb_container = os.getenv("MONGODB_CONTAINER_NAME", "mongodb")
+        self.backend_container = os.getenv("BACKEND_CONTAINER_NAME", "backend")
+        self.frontend_container = os.getenv("FRONTEND_CONTAINER_NAME", "frontend")
+        
     def get_docker_compose_cmd(self) -> List[str]:
         """Get the docker compose command to use"""
         if self.docker_compose_cmd is None:
@@ -45,6 +50,42 @@ class DevManager:
             if not self.check_docker_compose():
                 raise RuntimeError("Docker Compose is not available")
         return self.docker_compose_cmd
+    
+    def get_container_name(self, service: str) -> str:
+        """Get the actual container name for a service from docker-compose"""
+        # Try to get container name from docker-compose ps
+        result = subprocess.run(
+            [*self.get_docker_compose_cmd(), "ps", "-q", service],
+            capture_output=True,
+            text=True,
+            cwd=self.project_root
+        )
+        
+        if result.returncode == 0 and result.stdout.strip():
+            # Get container ID and then its name
+            container_id = result.stdout.strip()
+            name_result = subprocess.run(
+                ["docker", "inspect", "-f", "{{.Name}}", container_id],
+                capture_output=True,
+                text=True
+            )
+            if name_result.returncode == 0:
+                # Remove leading slash from container name
+                return name_result.stdout.strip().lstrip('/')
+        
+        # Fallback to default project-service naming convention
+        project_name = self.get_project_name()
+        return f"{project_name}-{service}-1"
+    
+    def get_project_name(self) -> str:
+        """Get the docker-compose project name"""
+        # Try to get from COMPOSE_PROJECT_NAME env var
+        project_name = os.getenv("COMPOSE_PROJECT_NAME")
+        if project_name:
+            return project_name
+        
+        # Default to directory name
+        return self.project_root.name.lower()
     
     def print_header(self, text: str):
         """Print formatted header"""
@@ -387,9 +428,10 @@ class DevManager:
             return False
         
         # Copy backup to host
+        mongodb_container = self.get_container_name(self.mongodb_container)
         result = self.run_command([
             "docker", "cp",
-            f"speecher-mongodb:/tmp/backup_{timestamp}",
+            f"{mongodb_container}:/tmp/backup_{timestamp}",
             str(backup_dir)
         ])
         
@@ -446,10 +488,11 @@ class DevManager:
         
         # Copy backup to container
         temp_path = f"/tmp/restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        mongodb_container = self.get_container_name(self.mongodb_container)
         result = self.run_command([
             "docker", "cp",
             str(backup_path),
-            f"speecher-mongodb:{temp_path}"
+            f"{mongodb_container}:{temp_path}"
         ])
         
         if not result:
