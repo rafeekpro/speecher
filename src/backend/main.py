@@ -179,17 +179,23 @@ async def transcribe(
         )
     
     # Basic corruption check for WAV files (skip for test data)
-    if file_extension == ".wav" or "wav" in file.content_type:
-        # Only check if it looks like a real file (not test data)
-        if len(file_content) > 4:  # Has some content
-            # Check for RIFF header or common test patterns
-            if not file_content.startswith(b"RIFF") and not file_content.startswith(b"test") and file_content != b"mock_data":
-                # Only fail if it's clearly corrupted (explicitly marked)
-                if b"CORRUPTED" in file_content:
-                    raise HTTPException(
-                        status_code=400,
-                        detail="Invalid or corrupted WAV file"
-                    )
+    # Validate audio file format using proper validation
+    from src.backend.file_validator import validate_audio_file
+    
+    # Allow test files in test environment
+    is_test_env = os.getenv("TESTING", "false").lower() == "true"
+    is_valid, message, audio_format = validate_audio_file(
+        file_content, 
+        file.filename,
+        max_size=MAX_FILE_SIZE,
+        allow_test_files=is_test_env
+    )
+    
+    if not is_valid:
+        raise HTTPException(
+            status_code=400,
+            detail=message
+        )
     
     # Save uploaded file to temporary location
     try:

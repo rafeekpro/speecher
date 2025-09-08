@@ -146,9 +146,24 @@ class WebSocketManager:
         return None
     
     def validate_auth(self, auth_token: str) -> bool:
-        """Validate authentication token"""
-        # Simple validation for now - can be enhanced with JWT
-        return auth_token and len(auth_token) > 10
+        """Validate authentication token using JWT"""
+        if not auth_token:
+            return False
+        
+        try:
+            from src.backend.auth import decode_token
+            # Validate JWT token
+            payload = decode_token(auth_token)
+            # Check if token is valid and has required claims
+            return payload.get("sub") is not None and payload.get("type") == "access"
+        except Exception:
+            # If not a valid JWT, try API key validation
+            try:
+                from src.backend.auth import get_user_by_api_key
+                user = get_user_by_api_key(auth_token)
+                return user is not None
+            except Exception:
+                return False
     
     async def connect_with_auth(self, websocket: WebSocket, client_id: str, auth_token: str) -> bool:
         """Connect with authentication"""
