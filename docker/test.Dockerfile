@@ -11,11 +11,12 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements
-COPY requirements.txt pyproject.toml ./
+COPY requirements/base.txt requirements/test.txt requirements/
+COPY pyproject.toml ./
 
 # Install Python dependencies including test dependencies
-RUN pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir pytest pytest-asyncio pytest-cov pytest-mock requests-mock
+RUN pip install --no-cache-dir -r requirements/base.txt && \
+    pip install --no-cache-dir -r requirements/test.txt
 
 # Create non-root user
 RUN useradd -m -u 1000 speecher && \

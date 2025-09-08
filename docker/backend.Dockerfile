@@ -11,10 +11,11 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements files
-COPY requirements.txt pyproject.toml ./
+COPY requirements/ requirements/
+COPY pyproject.toml ./
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt && \
+RUN pip install --no-cache-dir -r requirements/base.txt && \
     pip install --no-cache-dir uvicorn[standard] watchfiles
 
 # Create non-root user

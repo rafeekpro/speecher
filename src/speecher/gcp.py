@@ -132,15 +132,18 @@ def start_transcription_job(gcs_uri, project_id, job_name=None, language_code="p
         client = speech.SpeechClient()
         
         # Przygotuj konfigurację rozpoznawania mowy
-        audio = speech.types.RecognitionAudio(uri=gcs_uri)
+        audio = speech.RecognitionAudio(uri=gcs_uri)
         
         # Określ format audio - zakładamy WAV
-        config = speech.types.RecognitionConfig(
+        config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
             sample_rate_hertz=16000,  # Hz - to trzeba dostosować do faktycznego pliku
             language_code=language_code,
-            enable_speaker_diarization=True,
-            diarization_speaker_count=max_speakers,
+            diarization_config=speech.SpeakerDiarizationConfig(
+                enable_speaker_diarization=True,
+                min_speaker_count=1,
+                max_speaker_count=max_speakers
+            ),
             enable_automatic_punctuation=True,
             enable_word_time_offsets=True
         )
@@ -150,7 +153,7 @@ def start_transcription_job(gcs_uri, project_id, job_name=None, language_code="p
         
         # Zwróć informacje o zadaniu
         job_info = {
-            'name': job_name,
+            'name': operation.name if hasattr(operation, 'name') else job_name,
             'operation': str(operation.operation),
             'done': operation.done(),
             'project_id': project_id,
@@ -470,10 +473,10 @@ def transcribe_short_audio(audio_file_path, project_id, language_code="pl-PL", m
         with open(audio_file_path, "rb") as audio_file:
             content = audio_file.read()
         
-        audio = speech.types.RecognitionAudio(content=content)
+        audio = speech.RecognitionAudio(content=content)
         
         # Określ format audio - zakładamy WAV
-        config = speech.types.RecognitionConfig(
+        config = speech.RecognitionConfig(
             encoding=speech.RecognitionConfig.AudioEncoding.LINEAR16,
             sample_rate_hertz=16000,  # Hz - to trzeba dostosować do faktycznego pliku
             language_code=language_code,
@@ -532,7 +535,16 @@ def detect_audio_properties(audio_file_path):
         return properties
     except ImportError:
         logger.warning("Nie można wykryć właściwości audio - biblioteka pydub nie jest zainstalowana")
-        return None
+        # Return default properties
+        return {
+            'channels': 1,
+            'sample_width': 2,
+            'frame_rate': 16000,
+            'frame_width': 2,
+            'length_seconds': 0,
+            'length_ms': 0,
+            'frame_count': 0
+        }
     except Exception as e:
         logger.error(f"Błąd podczas wykrywania właściwości audio: {e}")
         return None

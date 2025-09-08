@@ -1,0 +1,67 @@
+# Git
+.git
+.gitignore
+.github/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+ENV/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Documentation
+docs/
+*.md
+LICENSE
+
+# Test files
+tests/
+scripts/test/
+scripts/dev/generate_test_audio.py
+scripts/dev/debug_backend.py
+
+# Config files not needed in container
+config/.env.example
+.env
+.env.example
+.envrc
+
+# Package managers
+poetry.lock
+uv.lock
+# Note: pyproject.toml is needed for Docker build - don't ignore it
+# Makefile is also useful for builds
+# Makefile
+
+# Development scripts
+scripts/dev/devmanager.py
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+tmp/
+temp/

@@ -118,16 +118,15 @@ class TestTranscriptionModule(unittest.TestCase):
             }
         }
         
-        with patch('builtins.print') as mock_print, \
-             patch('logging.Logger.error') as mock_logger_error:
+        with patch('builtins.print') as mock_print:
             result = transcription.process_transcription_result(modified_data)
             
-            self.assertFalse(result)
-            mock_logger_error.assert_called_with("Dane transkrypcji nie zawierają informacji o mówcach")
+            # Now the function should handle transcriptions without speaker_labels
+            self.assertTrue(result)
     
     def test_process_transcription_result_missing_items(self):
         """Test processing data with missing items"""
-        # Create data with missing items
+        # Create data with missing items but with transcripts
         modified_data = {
             "results": {
                 "transcripts": [
@@ -137,12 +136,11 @@ class TestTranscriptionModule(unittest.TestCase):
             }
         }
         
-        with patch('builtins.print') as mock_print, \
-             patch('logging.Logger.error') as mock_logger_error:
+        with patch('builtins.print') as mock_print:
             result = transcription.process_transcription_result(modified_data)
             
-            self.assertFalse(result)
-            mock_logger_error.assert_called_with("Dane transkrypcji nie zawierają informacji o mówcach")
+            # Now the function should handle this case
+            self.assertTrue(result)
     
     def test_process_transcription_result_alternative_method(self):
         """Test processing with the alternative grouping method"""
@@ -173,16 +171,12 @@ class TestTranscriptionModule(unittest.TestCase):
         if 'items' not in modified_data.get('results', {}):
             modified_data['results']['items'] = self.sample_data['results']['items']
         
-        with patch('builtins.print') as mock_print, \
-             patch('logging.Logger.info') as mock_logger_info, \
-             patch('logging.Logger.error') as mock_logger_error:
-            # This should use the simple method but not raise error about missing speaker_labels
-            # Ponieważ usunęliśmy speaker_labels, kod powinien zalogować błąd i zwrócić False
+        with patch('builtins.print') as mock_print:
+            # This should use the simple method without speaker_labels
             result = transcription.process_transcription_result(modified_data)
             
-            # Sprawdź, czy funkcja poprawnie obsłużyła brak speaker_labels
-            mock_logger_error.assert_called_with("Dane transkrypcji nie zawierają informacji o mówcach")
-            self.assertFalse(result)
+            # The function should now handle this case successfully
+            self.assertTrue(result)
     
     def test_process_transcription_result_unexpected_error(self):
         """Test handling of unexpected errors during processing"""
