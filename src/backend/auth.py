@@ -199,19 +199,54 @@ def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
     api_key: Optional[str] = Security(api_key_header)
 ) -> Optional[UserDB]:
-    """Get current user from JWT token or API key (optional)"""
-    # Try JWT token first
-    if credentials:
+    """Get current user from JWT token or API key (optional).
+    
+    This function is for endpoints that support optional authentication.
+    For required authentication, use get_current_user directly.
+    
+    Returns:
+        UserDB if authenticated, None if no valid credentials provided.
+    
+    Note:
+        This intentionally returns None instead of raising exceptions
+        to support endpoints with optional authentication.
+    """
+    # Try JWT token first (preferred method)
+    if credentials and credentials.credentials:
         try:
             return get_current_user(credentials)
         except HTTPException:
+            # Invalid JWT, but might have valid API key
             pass
     
-    # Try API key
+    # Try API key as fallback
     if api_key:
-        return get_user_by_api_key(api_key)
+        user = get_user_by_api_key(api_key)
+        if user:
+            return user
     
+    # No valid authentication provided - this is acceptable for optional auth
     return None
+
+
+def require_auth(
+    credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    api_key: Optional[str] = Security(api_key_header)
+) -> UserDB:
+    """Require authentication via JWT or API key.
+    
+    This function requires valid authentication and raises HTTPException if not provided.
+    
+    Raises:
+        HTTPException: 401 if no valid authentication is provided.
+    """
+    user = get_current_user_optional(credentials, api_key)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required"
+        )
+    return user
 
 
 def create_api_key(user_id: str, name: str, expires_at: Optional[datetime] = None) -> tuple[str, ApiKeyDB]:
