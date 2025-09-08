@@ -63,8 +63,29 @@ class TestTranscribeEndpoint:
     
     @pytest.fixture
     def audio_file(self):
-        """Create a mock audio file"""
-        return io.BytesIO(b"fake audio content")
+        """Create a mock WAV audio file with valid header"""
+        # Create a minimal valid WAV file header
+        # WAV header structure:
+        # RIFF chunk (12 bytes)
+        wav_data = b'RIFF'  # ChunkID
+        wav_data += b'\x24\x00\x00\x00'  # ChunkSize (36 bytes for header + 0 for data)
+        wav_data += b'WAVE'  # Format
+        
+        # fmt sub-chunk (24 bytes)
+        wav_data += b'fmt '  # Subchunk1ID
+        wav_data += b'\x10\x00\x00\x00'  # Subchunk1Size (16 for PCM)
+        wav_data += b'\x01\x00'  # AudioFormat (1 = PCM)
+        wav_data += b'\x01\x00'  # NumChannels (1 = mono)
+        wav_data += b'\x44\xac\x00\x00'  # SampleRate (44100)
+        wav_data += b'\x88\x58\x01\x00'  # ByteRate (88200)
+        wav_data += b'\x02\x00'  # BlockAlign (2)
+        wav_data += b'\x10\x00'  # BitsPerSample (16)
+        
+        # data sub-chunk
+        wav_data += b'data'  # Subchunk2ID
+        wav_data += b'\x00\x00\x00\x00'  # Subchunk2Size (0 bytes of actual audio)
+        
+        return io.BytesIO(wav_data)
     
     @pytest.fixture
     def mock_aws_functions(self):
@@ -497,7 +518,9 @@ class TestErrorHandling:
         
         mock_upload.return_value = (False, None)  # Returns tuple (success, bucket_name)
         
-        audio_file = io.BytesIO(b"fake audio")
+        # Create a minimal valid WAV file
+        wav_data = b'RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00'
+        audio_file = io.BytesIO(wav_data)
         response = client.post(
             "/transcribe",
             files={"file": ("test.wav", audio_file, "audio/wav")},
@@ -519,7 +542,9 @@ class TestErrorHandling:
                 "duration": 1.0
             }
             
-            audio_file = io.BytesIO(b"fake audio")
+            # Create a minimal valid WAV file
+            wav_data = b'RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00'
+            audio_file = io.BytesIO(wav_data)
             response = client.post(
                 "/transcribe",
                 files={"file": ("test.wav", audio_file, "audio/wav")},
