@@ -25,7 +25,7 @@ AUDIO_MAGIC_BYTES = {
     b"\xff\xfb": AudioFormat.MP3,  # MP3 without ID3
     b"\xff\xf3": AudioFormat.MP3,  # MP3 without ID3
     b"\xff\xf2": AudioFormat.MP3,  # MP3 without ID3
-    b"ftyp": AudioFormat.M4A,  # M4A/MP4 (check at offset 4)
+    # b"ftyp": AudioFormat.M4A,  # M4A/MP4 (check at offset 4) -- removed, see detection logic below
     b"fLaC": AudioFormat.FLAC, # FLAC
     b"OggS": AudioFormat.OGG,  # OGG Vorbis
 }
