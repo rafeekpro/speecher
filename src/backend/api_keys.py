@@ -118,10 +118,14 @@ class APIKeysManager:
                 else:
                     decrypted_keys[key] = value
             
+            # Check if provider is properly configured
+            is_configured = self.validate_provider_config(document["provider"], decrypted_keys)
+            
             return {
                 "provider": document["provider"],
                 "keys": decrypted_keys,
                 "enabled": document.get("enabled", True),
+                "configured": is_configured,
                 "updated_at": document.get("updated_at"),
                 "source": "mongodb"
             }
@@ -140,41 +144,47 @@ class APIKeysManager:
             access_key = os.getenv("AWS_ACCESS_KEY_ID")
             secret_key = os.getenv("AWS_SECRET_ACCESS_KEY")
             if access_key and secret_key:
+                keys = {
+                    "access_key_id": access_key,
+                    "secret_access_key": secret_key,
+                    "region": os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
+                    "s3_bucket_name": os.getenv("S3_BUCKET_NAME", "speecher-rafal-app")
+                }
                 return {
                     "provider": "aws",
-                    "keys": {
-                        "access_key_id": access_key,
-                        "secret_access_key": secret_key,
-                        "region": os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
-                        "s3_bucket_name": os.getenv("S3_BUCKET_NAME", "speecher-rafal-app")
-                    },
+                    "keys": keys,
                     "enabled": True,
+                    "configured": self.validate_provider_config("aws", keys),
                     "updated_at": None
                 }
         elif provider == "azure":
             subscription_key = os.getenv("AZURE_SPEECH_KEY")
             if subscription_key:
+                keys = {
+                    "subscription_key": subscription_key,
+                    "region": os.getenv("AZURE_SPEECH_REGION", "eastus")
+                }
                 return {
                     "provider": "azure",
-                    "keys": {
-                        "subscription_key": subscription_key,
-                        "region": os.getenv("AZURE_SPEECH_REGION", "eastus")
-                    },
+                    "keys": keys,
                     "enabled": True,
+                    "configured": self.validate_provider_config("azure", keys),
                     "updated_at": None
                 }
         elif provider == "gcp":
             credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
             if credentials_path and os.path.exists(credentials_path):
                 with open(credentials_path, 'r') as f:
+                    keys = {
+                        "credentials_json": f.read(),
+                        "project_id": os.getenv("GCP_PROJECT_ID"),
+                        "gcs_bucket_name": os.getenv("GCP_BUCKET_NAME", "speecher-gcp")
+                    }
                     return {
                         "provider": "gcp",
-                        "keys": {
-                            "credentials_json": f.read(),
-                            "project_id": os.getenv("GCP_PROJECT_ID"),
-                            "gcs_bucket_name": os.getenv("GCP_BUCKET_NAME", "speecher-gcp")
-                        },
+                        "keys": keys,
                         "enabled": True,
+                        "configured": self.validate_provider_config("gcp", keys),
                         "updated_at": None
                     }
         

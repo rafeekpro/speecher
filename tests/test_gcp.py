@@ -292,7 +292,12 @@ class TestGCPModule(unittest.TestCase):
         mock_result.alternatives = [mock_alternative]
         
         mock_operation.done = True
-        mock_operation.result.return_value.results = [mock_result]
+        mock_operation.error = None  # Explicitly set error to None for success case
+        
+        # Set up operation.response (not operation.result)
+        mock_response = MagicMock()
+        mock_response.results = [mock_result]
+        mock_operation.response = mock_response
         
         mock_operations_client.get_operation.return_value = mock_operation
         mock_client.transport._operations_client = mock_operations_client
@@ -302,8 +307,10 @@ class TestGCPModule(unittest.TestCase):
         
         self.assertIsNotNone(result)
         self.assertIn("results", result)
-        self.assertIsInstance(result["results"], list)
-        self.assertGreater(len(result["results"]), 0)
+        self.assertIsInstance(result["results"], dict)
+        self.assertIn("transcripts", result["results"])
+        self.assertIn("items", result["results"])
+        self.assertGreater(len(result["results"]["transcripts"]), 0)
     
     @patch('google.cloud.speech.SpeechClient')
     def test_download_transcription_result_not_done(self, mock_speech_client_class):

@@ -25,12 +25,51 @@ def process_transcription_result(transcription_data, output_file=None, include_t
         bool: True jeśli przetwarzanie się powiodło, False w przypadku błędu
     """
     try:
-        result = transcription_data['results']
-        
-        # Sprawdźmy czy transkrypcja zawiera identyfikację mówców
-        if not result.get('speaker_labels') or not result.get('items'):
-            logger.error("Dane transkrypcji nie zawierają informacji o mówcach")
+        # Validate input
+        if not transcription_data:
+            logger.error("Puste dane transkrypcji")
             return False
+            
+        if not isinstance(transcription_data, dict):
+            logger.error("Nieprawidłowy format danych transkrypcji")
+            return False
+        
+        # Sprawdź, jaki format danych został przekazany
+        if 'recognizedPhrases' in transcription_data or 'combinedRecognizedPhrases' in transcription_data:
+            # Azure format
+            return process_azure_transcription(transcription_data, output_file, include_timestamps)
+        elif 'results' in transcription_data:
+            result = transcription_data['results']
+            
+            # Sprawdź czy to GCP (results jest listą)
+            if isinstance(result, list):
+                # GCP format
+                return process_gcp_transcription(transcription_data, output_file, include_timestamps)
+            # AWS format (results jest dict)
+            elif isinstance(result, dict):
+                # Sprawdź czy transkrypcja zawiera identyfikację mówców
+                if result.get('speaker_labels') and result.get('items'):
+                    return process_aws_transcription_with_speakers(transcription_data, output_file, include_timestamps)
+                elif result.get('transcripts'):
+                    # AWS format bez speaker labels
+                    return process_aws_transcription_simple(transcription_data, output_file, include_timestamps)
+                else:
+                    logger.error("Nieznany format danych AWS")
+                    return False
+            else:
+                logger.error("Nieznany format danych w polu 'results'")
+                return False
+        else:
+            logger.error("Nieznany format danych transkrypcji")
+            return False
+    except Exception as e:
+        logger.error(f"Błąd podczas przetwarzania transkrypcji: {e}")
+        return False
+
+def process_aws_transcription_with_speakers(transcription_data, output_file=None, include_timestamps=True):
+    """Przetwarza transkrypcję AWS z identyfikacją mówców."""
+    try:
+        result = transcription_data['results']
         
         speaker_segments = result['speaker_labels']['segments']
         items = result['items']
@@ -298,4 +337,220 @@ def process_transcription_result(transcription_data, output_file=None, include_t
         return False
     except Exception as e:
         logger.error(f"Nieoczekiwany błąd podczas przetwarzania transkrypcji: {e}")
+        return False
+
+def process_aws_transcription_simple(transcription_data, output_file=None, include_timestamps=True):
+    """Przetwarza prostą transkrypcję AWS bez identyfikacji mówców."""
+    try:
+        result = transcription_data['results']
+        transcripts = result.get('transcripts', [])
+        items = result.get('items', [])
+        
+        if not transcripts:
+            logger.error("Brak transkrypcji w danych AWS")
+            return False
+        
+        transcript_text = transcripts[0].get('transcript', '')
+        
+        # Przygotuj zawartość transkrypcji
+        transcript_lines = []
+        
+        if include_timestamps and items:
+            # Formatuj z timestamps
+            for item in items:
+                if item.get('type') == 'pronunciation':
+                    start_time = float(item.get('start_time', 0))
+                    end_time = float(item.get('end_time', 0))
+                    content = item.get('alternatives', [{}])[0].get('content', '')
+                    
+                    # Formatowanie czasu
+                    start_hours = int(start_time // 3600)
+                    start_minutes = int((start_time % 3600) // 60)
+                    start_seconds = start_time % 60
+                    
+                    end_hours = int(end_time // 3600)
+                    end_minutes = int((end_time % 3600) // 60)
+                    end_seconds = end_time % 60
+                    
+                    time_str = f"[{start_hours:02d}:{start_minutes:02d}:{start_seconds:06.3f} - {end_hours:02d}:{end_minutes:02d}:{end_seconds:06.3f}]"
+                    line = f"{time_str} {content}"
+                    transcript_lines.append(line)
+        else:
+            # Bez timestamps - tylko tekst
+            transcript_lines.append(transcript_text)
+        
+        # Wyświetl wyniki
+        print("\n=== TRANSKRYPCJA ===\n")
+        for line in transcript_lines:
+            print(line)
+        
+        # Zapisz do pliku
+        if output_file:
+            try:
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    f.write("\n".join(transcript_lines))
+                logger.info(f"Zapisano transkrypcję do pliku: {output_file}")
+            except Exception as e:
+                logger.error(f"Błąd podczas zapisywania transkrypcji do pliku: {e}")
+                return False
+        
+        return True
+    except Exception as e:
+        logger.error(f"Błąd podczas przetwarzania prostej transkrypcji AWS: {e}")
+        return False
+
+def process_azure_transcription(transcription_data, output_file=None, include_timestamps=True):
+    """Przetwarza transkrypcję Azure."""
+    try:
+        combined_phrases = transcription_data.get('combinedRecognizedPhrases', [])
+        recognized_phrases = transcription_data.get('recognizedPhrases', [])
+        
+        transcript_lines = []
+        
+        if combined_phrases:
+            # Użyj połączonego tekstu
+            for phrase in combined_phrases:
+                text = phrase.get('display', '')
+                transcript_lines.append(text)
+        elif recognized_phrases:
+            # Użyj rozpoznanych fraz
+            for phrase in recognized_phrases:
+                if phrase.get('recognitionStatus') == 'Success':
+                    nbest = phrase.get('nBest', [])
+                    if nbest:
+                        text = nbest[0].get('display', '')
+                        
+                        if include_timestamps:
+                            offset = phrase.get('offset', 0) / 10000000  # Convert to seconds
+                            duration = phrase.get('duration', 0) / 10000000
+                            
+                            start_time = offset
+                            end_time = offset + duration
+                            
+                            # Formatowanie czasu
+                            start_hours = int(start_time // 3600)
+                            start_minutes = int((start_time % 3600) // 60)
+                            start_seconds = start_time % 60
+                            
+                            end_hours = int(end_time // 3600)
+                            end_minutes = int((end_time % 3600) // 60)
+                            end_seconds = end_time % 60
+                            
+                            time_str = f"[{start_hours:02d}:{start_minutes:02d}:{start_seconds:06.3f} - {end_hours:02d}:{end_minutes:02d}:{end_seconds:06.3f}]"
+                            line = f"{time_str} {text}"
+                        else:
+                            line = text
+                        
+                        transcript_lines.append(line)
+        
+        if not transcript_lines:
+            logger.error("Brak transkrypcji w danych Azure")
+            return False
+        
+        # Wyświetl wyniki
+        print("\n=== TRANSKRYPCJA ===\n")
+        for line in transcript_lines:
+            print(line)
+        
+        # Zapisz do pliku
+        if output_file:
+            try:
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    f.write("\n".join(transcript_lines))
+                logger.info(f"Zapisano transkrypcję do pliku: {output_file}")
+            except Exception as e:
+                logger.error(f"Błąd podczas zapisywania transkrypcji do pliku: {e}")
+                return False
+        
+        return True
+    except Exception as e:
+        logger.error(f"Błąd podczas przetwarzania transkrypcji Azure: {e}")
+        return False
+
+def process_gcp_transcription(transcription_data, output_file=None, include_timestamps=True):
+    """Przetwarza transkrypcję GCP."""
+    try:
+        results = transcription_data.get('results', [])
+        
+        if not results:
+            logger.error("Brak wyników w danych GCP")
+            return False
+        
+        transcript_lines = []
+        
+        for result in results:
+            alternatives = result.get('alternatives', [])
+            if alternatives:
+                transcript = alternatives[0].get('transcript', '')
+                
+                # Jeśli są timestamps i słowa, użyj ich
+                if include_timestamps and 'words' in alternatives[0]:
+                    words = alternatives[0].get('words', [])
+                    # Jeśli words jest niepełne (mniej słów niż w transcript), użyj pełnego tekstu
+                    if len(words) < len(transcript.split()):
+                        transcript_lines.append(transcript)
+                        continue
+                    for word_info in words:
+                        word = word_info.get('word', '')
+                        
+                        # Handle different formats of time
+                        start_time_data = word_info.get('startTime', 0)
+                        end_time_data = word_info.get('endTime', 0)
+                        
+                        if isinstance(start_time_data, dict):
+                            # Format with seconds and nanos
+                            start_time = start_time_data.get('seconds', 0) + start_time_data.get('nanos', 0) / 1e9
+                        elif isinstance(start_time_data, str):
+                            # String format
+                            start_time = float(start_time_data.rstrip('s'))
+                        else:
+                            start_time = float(start_time_data)
+                        
+                        if isinstance(end_time_data, dict):
+                            # Format with seconds and nanos
+                            end_time = end_time_data.get('seconds', 0) + end_time_data.get('nanos', 0) / 1e9
+                        elif isinstance(end_time_data, str):
+                            # String format
+                            end_time = float(end_time_data.rstrip('s'))
+                        else:
+                            end_time = float(end_time_data)
+                        
+                        # Formatowanie czasu
+                        start_hours = int(start_time // 3600)
+                        start_minutes = int((start_time % 3600) // 60)
+                        start_seconds = start_time % 60
+                        
+                        end_hours = int(end_time // 3600)
+                        end_minutes = int((end_time % 3600) // 60)
+                        end_seconds = end_time % 60
+                        
+                        time_str = f"[{start_hours:02d}:{start_minutes:02d}:{start_seconds:06.3f} - {end_hours:02d}:{end_minutes:02d}:{end_seconds:06.3f}]"
+                        line = f"{time_str} {word}"
+                        transcript_lines.append(line)
+                else:
+                    # Brak words lub timestamps wyłączone - użyj pełnego tekstu
+                    transcript_lines.append(transcript)
+        
+        if not transcript_lines:
+            logger.error("Brak transkrypcji w danych GCP")
+            return False
+        
+        # Wyświetl wyniki
+        print("\n=== TRANSKRYPCJA ===\n")
+        for line in transcript_lines:
+            print(line)
+        
+        # Zapisz do pliku
+        if output_file:
+            try:
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    f.write("\n".join(transcript_lines))
+                logger.info(f"Zapisano transkrypcję do pliku: {output_file}")
+            except Exception as e:
+                logger.error(f"Błąd podczas zapisywania transkrypcji do pliku: {e}")
+                return False
+        
+        return True
+    except Exception as e:
+        logger.error(f"Błąd podczas przetwarzania transkrypcji GCP: {e}")
         return False

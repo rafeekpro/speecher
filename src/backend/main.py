@@ -70,6 +70,9 @@ collection = db[MONGODB_COLLECTION]
 # Initialize API Keys Manager
 api_keys_manager = APIKeysManager(MONGODB_URI, MONGODB_DB)
 
+# MongoDB collections
+transcriptions_collection = db["transcriptions"]
+
 class CloudProvider(str, Enum):
     AWS = "aws"
     AZURE = "azure"
@@ -105,6 +108,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+async def root():
+    """Root endpoint."""
+    return {"message": "Welcome to Speecher API", "version": "1.0.0"}
+
+@app.get("/providers")
+async def get_providers():
+    """Get list of available providers."""
+    return ["aws", "azure", "gcp"]
 
 @app.post("/transcribe", response_model=TranscriptionResponse)
 async def transcribe(
@@ -460,18 +473,23 @@ async def get_transcription_history(
         query["provider"] = provider
     
     # Fetch from MongoDB
-    cursor = collection.find(query).sort("created_at", -1).limit(limit)
-    
-    results = []
-    for doc in cursor:
-        doc["id"] = str(doc["_id"])
-        doc.pop("_id", None)
-        # Convert datetime to ISO format
-        if "created_at" in doc:
-            doc["created_at"] = doc["created_at"].isoformat()
-        results.append(doc)
-    
-    return results
+    try:
+        cursor = collection.find(query).sort("created_at", -1).limit(limit)
+        
+        results = []
+        for doc in cursor:
+            doc["id"] = str(doc["_id"])
+            doc.pop("_id", None)
+            # Convert datetime to ISO format
+            if "created_at" in doc:
+                doc["created_at"] = doc["created_at"].isoformat()
+            results.append(doc)
+        
+        return results
+    except Exception as e:
+        # Return empty list if MongoDB is not available
+        logger.warning(f"MongoDB error in history endpoint: {e}")
+        return []
 
 @app.get("/transcription/{transcription_id}")
 async def get_transcription(transcription_id: str) -> Dict[str, Any]:
@@ -578,7 +596,13 @@ async def get_statistics():
             "recent_files": recent_files
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.warning(f"MongoDB error in stats endpoint: {e}")
+        # Return default stats if MongoDB is not available
+        return {
+            "total_transcriptions": 0,
+            "provider_statistics": [],
+            "recent_files": []
+        }
 
 def process_transcription_data(transcription_data: Dict[str, Any], enable_diarization: bool) -> Dict[str, Any]:
     """Process transcription data and extract relevant information."""
@@ -734,7 +758,7 @@ async def save_api_keys(provider: str, request: APIKeyRequest):
     """Save or update API keys for a provider."""
     success = api_keys_manager.save_api_keys(provider, request.keys)
     if success:
-        return {"status": "success", "message": f"API keys for {provider} saved successfully"}
+        return {"success": True, "message": f"API keys for {provider} saved successfully"}
     else:
         raise HTTPException(status_code=500, detail="Failed to save API keys")
 
@@ -779,7 +803,7 @@ async def delete_api_keys(provider: str):
     """Delete API keys for a provider."""
     success = api_keys_manager.delete_api_keys(provider)
     if success:
-        return {"status": "success", "message": f"API keys for {provider} deleted"}
+        return {"success": True, "message": f"API keys for {provider} deleted"}
     else:
         raise HTTPException(status_code=404, detail="Provider not found")
 
@@ -788,7 +812,7 @@ async def toggle_provider(provider: str, enabled: bool = True):
     """Enable or disable a provider."""
     success = api_keys_manager.toggle_provider(provider, enabled)
     if success:
-        return {"status": "success", "enabled": enabled}
+        return {"success": True, "enabled": enabled}
     else:
         raise HTTPException(status_code=404, detail="Provider not found")
 

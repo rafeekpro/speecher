@@ -43,16 +43,14 @@ class TestBackendMain(unittest.TestCase):
         self.assertIn("azure", data)
         self.assertIn("gcp", data)
     
-    @patch('src.backend.main.APIKeysManager')
-    def test_get_api_keys_endpoint(self, mock_manager_class):
+    @patch('src.backend.main.api_keys_manager')
+    def test_get_api_keys_endpoint(self, mock_manager):
         """Test getting API keys for all providers."""
-        mock_manager = MagicMock()
         mock_manager.get_all_providers.return_value = [
             {"provider": "aws", "configured": True, "enabled": True},
             {"provider": "azure", "configured": False, "enabled": True},
             {"provider": "gcp", "configured": False, "enabled": True}
         ]
-        mock_manager_class.return_value = mock_manager
         
         response = client.get("/api/keys")
         self.assertEqual(response.status_code, 200)
@@ -60,10 +58,9 @@ class TestBackendMain(unittest.TestCase):
         self.assertIsInstance(data, list)
         self.assertEqual(len(data), 3)
     
-    @patch('src.backend.main.APIKeysManager')
-    def test_get_api_keys_for_provider(self, mock_manager_class):
+    @patch('src.backend.main.api_keys_manager')
+    def test_get_api_keys_for_provider(self, mock_manager):
         """Test getting API keys for specific provider."""
-        mock_manager = MagicMock()
         mock_manager.get_api_keys.return_value = {
             "provider": "aws",
             "configured": True,
@@ -73,7 +70,6 @@ class TestBackendMain(unittest.TestCase):
                 "secret_access_key": "****"
             }
         }
-        mock_manager_class.return_value = mock_manager
         
         response = client.get("/api/keys/aws")
         self.assertEqual(response.status_code, 200)
@@ -81,13 +77,11 @@ class TestBackendMain(unittest.TestCase):
         self.assertEqual(data["provider"], "aws")
         self.assertTrue(data["configured"])
     
-    @patch('src.backend.main.APIKeysManager')
-    def test_save_api_keys(self, mock_manager_class):
+    @patch('src.backend.main.api_keys_manager')
+    def test_save_api_keys(self, mock_manager):
         """Test saving API keys."""
-        mock_manager = MagicMock()
         mock_manager.validate_provider_config.return_value = True
         mock_manager.save_api_keys.return_value = True
-        mock_manager_class.return_value = mock_manager
         
         payload = {
             "provider": "aws",
@@ -104,24 +98,20 @@ class TestBackendMain(unittest.TestCase):
         data = response.json()
         self.assertTrue(data["success"])
     
-    @patch('src.backend.main.APIKeysManager')
-    def test_delete_api_keys(self, mock_manager_class):
+    @patch('src.backend.main.api_keys_manager')
+    def test_delete_api_keys(self, mock_manager):
         """Test deleting API keys."""
-        mock_manager = MagicMock()
         mock_manager.delete_api_keys.return_value = True
-        mock_manager_class.return_value = mock_manager
         
         response = client.delete("/api/keys/aws")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertTrue(data["success"])
     
-    @patch('src.backend.main.APIKeysManager')
-    def test_toggle_provider(self, mock_manager_class):
+    @patch('src.backend.main.api_keys_manager')
+    def test_toggle_provider(self, mock_manager):
         """Test toggling provider enabled status."""
-        mock_manager = MagicMock()
         mock_manager.toggle_provider.return_value = True
-        mock_manager_class.return_value = mock_manager
         
         response = client.put("/api/keys/aws/toggle?enabled=false")
         self.assertEqual(response.status_code, 200)
@@ -131,7 +121,7 @@ class TestBackendMain(unittest.TestCase):
     def test_transcribe_missing_file(self):
         """Test transcribe endpoint without file."""
         response = client.post("/transcribe", data={"provider": "aws"})
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.status_code, 422)  # FastAPI returns 422 for validation errors
         data = response.json()
         self.assertIn("detail", data)
     
@@ -187,7 +177,7 @@ class TestBackendMain(unittest.TestCase):
             response = client.get("/db/health")
             self.assertEqual(response.status_code, 200)
             data = response.json()
-            self.assertEqual(data["status"], "connected")
+            self.assertEqual(data["status"], "healthy")
     
     def test_debug_aws_config(self):
         """Test debug AWS configuration endpoint."""

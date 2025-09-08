@@ -33,7 +33,7 @@ class TestStreamingModule(unittest.TestCase):
         manager = streaming.WebSocketManager()
         
         self.assertIsNotNone(manager)
-        self.assertIsInstance(manager.active_connections, list)
+        self.assertIsInstance(manager.active_connections, dict)
     
 
 

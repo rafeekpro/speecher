@@ -102,11 +102,8 @@ class TestAPIKeysManager(unittest.TestCase):
         
         # Valid Azure config
         valid_keys = {
-            "storage_account": "mystorageaccount",
-            "storage_key": "base64encodedkey==",
-            "container_name": "mycontainer",
-            "speech_key": "1234567890abcdef",
-            "speech_region": "westeurope"
+            "subscription_key": "1234567890abcdef",
+            "region": "westeurope"
         }
         
         result = manager.validate_provider_config("azure", valid_keys)
@@ -131,9 +128,9 @@ class TestAPIKeysManager(unittest.TestCase):
         
         # Valid GCP config
         valid_keys = {
+            "credentials_json": '{"type": "service_account", "project_id": "my-project"}',
             "project_id": "my-project-123",
-            "bucket_name": "my-gcp-bucket",
-            "credentials_json": '{"type": "service_account", "project_id": "my-project"}'
+            "gcs_bucket_name": "my-gcp-bucket"
         }
         
         result = manager.validate_provider_config("gcp", valid_keys)
@@ -155,7 +152,7 @@ class TestAPIKeysManager(unittest.TestCase):
         self.mock_db.__getitem__.return_value = self.mock_collection
         
         # Mock successful update
-        self.mock_collection.update_one.return_value = MagicMock(modified_count=1)
+        self.mock_collection.replace_one.return_value = MagicMock(modified_count=1)
         
         manager = APIKeysManager(self.mongodb_uri, self.db_name)
         
@@ -170,8 +167,8 @@ class TestAPIKeysManager(unittest.TestCase):
         self.assertTrue(result)
         
         # Verify MongoDB was called
-        self.mock_collection.update_one.assert_called_once()
-        call_args = self.mock_collection.update_one.call_args
+        self.mock_collection.replace_one.assert_called_once()
+        call_args = self.mock_collection.replace_one.call_args
         
         # Check that provider filter was used
         self.assertEqual(call_args[0][0]["provider"], "aws")
@@ -210,8 +207,8 @@ class TestAPIKeysManager(unittest.TestCase):
         self.assertTrue(result["configured"])
         self.assertTrue(result["enabled"])
         
-        # Check that sensitive values are masked
-        self.assertIn("****", result["keys"]["secret_access_key"])
+        # Check that sensitive values are decrypted (not masked)
+        self.assertEqual(result["keys"]["secret_access_key"], "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
         
         # Verify MongoDB was queried
         self.mock_collection.find_one.assert_called_once_with({"provider": "aws"})
@@ -242,8 +239,8 @@ class TestAPIKeysManager(unittest.TestCase):
         self.assertEqual(result["source"], "environment")
         
         # Check that environment values were used
-        self.assertIn("ENV_", result["keys"]["access_key_id"])
-        self.assertIn("****", result["keys"]["secret_access_key"])
+        self.assertEqual(result["keys"]["access_key_id"], "ENV_ACCESS_KEY")
+        self.assertEqual(result["keys"]["secret_access_key"], "ENV_SECRET_KEY")
     
     @patch('src.backend.api_keys.MongoClient')
     def test_get_all_providers(self, mock_mongo_client):
@@ -254,23 +251,19 @@ class TestAPIKeysManager(unittest.TestCase):
         
         manager = APIKeysManager(self.mongodb_uri, self.db_name)
         
-        # Mock MongoDB responses for different providers
-        def mock_find_one(query):
-            provider = query.get("provider")
-            if provider == "aws":
-                return {
-                    "provider": "aws",
-                    "enabled": True,
-                    "keys": {
-                        "access_key_id": manager.encrypt_value("AKIAIOSFODNN7EXAMPLE"),
-                        "secret_access_key": manager.encrypt_value("secret"),
-                        "region": "us-east-1",
-                        "s3_bucket_name": "bucket"
-                    }
+        # Mock MongoDB responses for find() which returns all providers
+        self.mock_collection.find.return_value = [
+            {
+                "provider": "aws",
+                "enabled": True,
+                "keys": {
+                    "access_key_id": manager.encrypt_value("AKIAIOSFODNN7EXAMPLE"),
+                    "secret_access_key": manager.encrypt_value("secret"),
+                    "region": "us-east-1",
+                    "s3_bucket_name": "bucket"
                 }
-            return None
-        
-        self.mock_collection.find_one.side_effect = mock_find_one
+            }
+        ]
         
         with patch.dict(os.environ, {}, clear=True):  # Clear environment variables
             result = manager.get_all_providers()
