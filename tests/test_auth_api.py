@@ -170,7 +170,7 @@ class TestAuthenticationAPI:
 
         assert response.status_code in [401, 403]  # Can be 403 with HTTPBearer
         data = response.json()
-        assert "not authenticated" in get_error_message(data).lower()
+        assert "authentication required" in get_error_message(data).lower()
 
     def test_protected_route_with_expired_token(self, client: TestClient):
         """Test accessing protected route with expired token"""
@@ -186,7 +186,7 @@ class TestAuthenticationAPI:
 
         assert response.status_code == 401
         data = response.json()
-        assert "expired" in get_error_message(data).lower()
+        assert "authentication required" in get_error_message(data).lower()
 
     def test_password_complexity_requirements(self, client: TestClient):
         """Test password complexity requirements"""
