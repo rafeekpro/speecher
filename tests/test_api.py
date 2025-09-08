@@ -63,8 +63,10 @@ class TestTranscribeEndpoint:
     
     @pytest.fixture
     def audio_file(self):
-        """Create a mock audio file"""
-        return io.BytesIO(b"fake audio content")
+        """Create a mock audio file with valid WAV header"""
+        # Minimal valid WAV file header
+        wav_data = b'RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00'
+        return io.BytesIO(wav_data)
     
     @pytest.fixture
     def mock_aws_functions(self):
