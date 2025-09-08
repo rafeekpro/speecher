@@ -13,12 +13,17 @@
     "@testing-library/jest-dom": "^5.17.0",
     "@testing-library/react": "^13.4.0",
     "@testing-library/user-event": "^13.5.0",
+    "@types/node": "^24.3.1",
+    "@types/react": "^19.1.12",
+    "@types/react-dom": "^19.1.9",
     "axios": "^1.6.2",
     "lucide-react": "^0.292.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "react-router-dom": "^7.8.2",
     "react-scripts": "5.0.1",
     "tailwindcss": "^3.3.5",
+    "typescript": "^5.9.2",
     "wavesurfer.js": "^7.4.2",
     "web-vitals": "^2.1.4"
   },
@@ -33,6 +38,17 @@
       "react-app",
       "react-app/jest"
     ]
+  },
+  "jest": {
+    "transformIgnorePatterns": [
+      "node_modules/(?!(axios)/)"
+    ],
+    "moduleNameMapper": {
+      "^@/(.*)$": "<rootDir>/src/$1",
+      "^@components/(.*)$": "<rootDir>/src/components/$1",
+      "^@services/(.*)$": "<rootDir>/src/services/$1",
+      "^@types/(.*)$": "<rootDir>/src/types/$1"
+    }
   },
   "browserslist": {
     "production": [
