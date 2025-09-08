@@ -49,9 +49,10 @@ config/.env.example
 
 # Package managers
 poetry.lock
-pyproject.toml
 uv.lock
-Makefile
+# Note: pyproject.toml is needed for Docker build - don't ignore it
+# Makefile is also useful for builds
+# Makefile
 
 # Development scripts
 scripts/dev/devmanager.py
