@@ -497,7 +497,9 @@ class TestErrorHandling:
         
         mock_upload.return_value = (False, None)  # Returns tuple (success, bucket_name)
         
-        audio_file = io.BytesIO(b"fake audio")
+        # Create a minimal valid WAV file
+        wav_data = b'RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00'
+        audio_file = io.BytesIO(wav_data)
         response = client.post(
             "/transcribe",
             files={"file": ("test.wav", audio_file, "audio/wav")},
@@ -519,7 +521,9 @@ class TestErrorHandling:
                 "duration": 1.0
             }
             
-            audio_file = io.BytesIO(b"fake audio")
+            # Create a minimal valid WAV file
+            wav_data = b'RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00\x44\xac\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data\x00\x00\x00\x00'
+            audio_file = io.BytesIO(wav_data)
             response = client.post(
                 "/transcribe",
                 files={"file": ("test.wav", audio_file, "audio/wav")},
