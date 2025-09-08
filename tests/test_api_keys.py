@@ -25,24 +25,29 @@ class TestAPIKeysManager(unittest.TestCase):
         self.mock_db = MagicMock()
         self.mock_collection = MagicMock()
         
-    @patch('pymongo.MongoClient')
+    @patch('src.backend.api_keys.MongoClient')
     def test_init(self, mock_mongo_client):
         """Test APIKeysManager initialization."""
-        mock_mongo_client.return_value = self.mock_client
-        self.mock_client.__getitem__.return_value = self.mock_db
+        mock_client = MagicMock()
+        mock_client.server_info.return_value = {"version": "4.4.0"}
+        mock_client.__getitem__.return_value = self.mock_db
         self.mock_db.__getitem__.return_value = self.mock_collection
+        mock_mongo_client.return_value = mock_client
         
         manager = APIKeysManager(self.mongodb_uri, self.db_name)
         
         self.assertIsNotNone(manager)
-        mock_mongo_client.assert_called_once_with(self.mongodb_uri)
+        self.assertTrue(manager.mongodb_available)
+        mock_mongo_client.assert_called_once_with(self.mongodb_uri, serverSelectionTimeoutMS=2000)
         
-    @patch('pymongo.MongoClient')
+    @patch('src.backend.api_keys.MongoClient')
     def test_encrypt_decrypt_value(self, mock_mongo_client):
         """Test encryption and decryption of values."""
-        mock_mongo_client.return_value = self.mock_client
-        self.mock_client.__getitem__.return_value = self.mock_db
+        mock_client = MagicMock()
+        mock_client.server_info.return_value = {"version": "4.4.0"}
+        mock_client.__getitem__.return_value = self.mock_db
         self.mock_db.__getitem__.return_value = self.mock_collection
+        mock_mongo_client.return_value = mock_client
         
         manager = APIKeysManager(self.mongodb_uri, self.db_name)
         
@@ -57,7 +62,7 @@ class TestAPIKeysManager(unittest.TestCase):
         decrypted = manager.decrypt_value(encrypted)
         self.assertEqual(decrypted, original_value)
     
-    @patch('pymongo.MongoClient')
+    @patch('src.backend.api_keys.MongoClient')
     def test_validate_provider_config_aws(self, mock_mongo_client):
         """Test AWS provider configuration validation."""
         mock_mongo_client.return_value = self.mock_client
@@ -86,7 +91,7 @@ class TestAPIKeysManager(unittest.TestCase):
         result = manager.validate_provider_config("aws", invalid_keys)
         self.assertFalse(result)
     
-    @patch('pymongo.MongoClient')
+    @patch('src.backend.api_keys.MongoClient')
     def test_validate_provider_config_azure(self, mock_mongo_client):
         """Test Azure provider configuration validation."""
         mock_mongo_client.return_value = self.mock_client
@@ -115,7 +120,7 @@ class TestAPIKeysManager(unittest.TestCase):
         result = manager.validate_provider_config("azure", invalid_keys)
         self.assertFalse(result)
     
-    @patch('pymongo.MongoClient')
+    @patch('src.backend.api_keys.MongoClient')
     def test_validate_provider_config_gcp(self, mock_mongo_client):
         """Test GCP provider configuration validation."""
         mock_mongo_client.return_value = self.mock_client
@@ -142,7 +147,7 @@ class TestAPIKeysManager(unittest.TestCase):
         result = manager.validate_provider_config("gcp", invalid_keys)
         self.assertFalse(result)
     
-    @patch('pymongo.MongoClient')
+    @patch('src.backend.api_keys.MongoClient')
     def test_save_api_keys(self, mock_mongo_client):
         """Test saving API keys to MongoDB."""
         mock_mongo_client.return_value = self.mock_client
@@ -174,7 +179,7 @@ class TestAPIKeysManager(unittest.TestCase):
         # Check that upsert was True
         self.assertTrue(call_args[1]["upsert"])
     
-    @patch('pymongo.MongoClient')
+    @patch('src.backend.api_keys.MongoClient')
     def test_get_api_keys_from_db(self, mock_mongo_client):
         """Test retrieving API keys from MongoDB."""
         mock_mongo_client.return_value = self.mock_client
@@ -217,7 +222,7 @@ class TestAPIKeysManager(unittest.TestCase):
         'AWS_DEFAULT_REGION': 'us-west-2',
         'S3_BUCKET_NAME': 'env-bucket'
     })
-    @patch('pymongo.MongoClient')
+    @patch('src.backend.api_keys.MongoClient')
     def test_get_api_keys_from_env(self, mock_mongo_client):
         """Test retrieving API keys from environment variables."""
         mock_mongo_client.return_value = self.mock_client
@@ -240,7 +245,7 @@ class TestAPIKeysManager(unittest.TestCase):
         self.assertIn("ENV_", result["keys"]["access_key_id"])
         self.assertIn("****", result["keys"]["secret_access_key"])
     
-    @patch('pymongo.MongoClient')
+    @patch('src.backend.api_keys.MongoClient')
     def test_get_all_providers(self, mock_mongo_client):
         """Test getting status of all providers."""
         mock_mongo_client.return_value = self.mock_client
@@ -284,7 +289,7 @@ class TestAPIKeysManager(unittest.TestCase):
         self.assertIsNotNone(azure_provider)
         self.assertFalse(azure_provider["configured"])
     
-    @patch('pymongo.MongoClient')
+    @patch('src.backend.api_keys.MongoClient')
     def test_delete_api_keys(self, mock_mongo_client):
         """Test deleting API keys."""
         mock_mongo_client.return_value = self.mock_client
@@ -302,7 +307,7 @@ class TestAPIKeysManager(unittest.TestCase):
         # Verify MongoDB delete was called
         self.mock_collection.delete_one.assert_called_once_with({"provider": "aws"})
     
-    @patch('pymongo.MongoClient')
+    @patch('src.backend.api_keys.MongoClient')
     def test_toggle_provider(self, mock_mongo_client):
         """Test toggling provider enabled status."""
         mock_mongo_client.return_value = self.mock_client
