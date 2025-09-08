@@ -139,17 +139,6 @@ function App() {
   });
   const [showSettings, setShowSettings] = useState(false);
 
-  useEffect(() => {
-    // Check backend health on mount
-    checkBackendHealth();
-    loadConfiguredProviders();
-    const interval = setInterval(() => {
-      checkBackendHealth();
-      loadConfiguredProviders();
-    }, 30000); // Check every 30s
-    return () => clearInterval(interval);
-  }, [checkBackendHealth, loadConfiguredProviders]);
-
   const checkBackendHealth = useCallback(async () => {
     const health = await checkHealth();
     setBackendStatus(health.status === 'healthy' ? 'healthy' : 'unhealthy');
@@ -175,6 +164,17 @@ function App() {
       console.error('Failed to load configured providers:', error);
     }
   }, [settings.provider]);
+
+  useEffect(() => {
+    // Check backend health on mount
+    checkBackendHealth();
+    loadConfiguredProviders();
+    const interval = setInterval(() => {
+      checkBackendHealth();
+      loadConfiguredProviders();
+    }, 30000); // Check every 30s
+    return () => clearInterval(interval);
+  }, [checkBackendHealth, loadConfiguredProviders]);
 
   const handleAudioRecorded = async (audioBlob, fileName = 'recording.wav') => {
     // Check if provider is configured

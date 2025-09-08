@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Box, Paper, Typography } from '@mui/material';
 
 const AudioVisualizer = ({ stream, isRecording }) => {
@@ -8,48 +8,7 @@ const AudioVisualizer = ({ stream, isRecording }) => {
   const animationRef = useRef(null);
   const [audioLevel, setAudioLevel] = useState(0);
 
-  useEffect(() => {
-    if (stream && isRecording) {
-      setupAudioAnalysis();
-    } else {
-      cleanup();
-    }
-
-    return cleanup;
-  }, [stream, isRecording, setupAudioAnalysis]);
-
-  const setupAudioAnalysis = () => {
-    try {
-      // Create audio context
-      const AudioContext = window.AudioContext || window.webkitAudioContext;
-      audioContextRef.current = new AudioContext();
-      
-      // Create analyser node
-      analyserRef.current = audioContextRef.current.createAnalyser();
-      analyserRef.current.fftSize = 256;
-      analyserRef.current.smoothingTimeConstant = 0.8;
-      
-      // Connect stream to analyser
-      const source = audioContextRef.current.createMediaStreamSource(stream);
-      source.connect(analyserRef.current);
-      
-      // Start visualization
-      visualize();
-    } catch (error) {
-      console.error('Error setting up audio analysis:', error);
-    }
-  };
-
-  const cleanup = () => {
-    if (animationRef.current) {
-      cancelAnimationFrame(animationRef.current);
-    }
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-    }
-  };
-
-  const visualize = () => {
+  const visualize = useCallback(() => {
     if (!analyserRef.current || !canvasRef.current) return;
 
     const canvas = canvasRef.current;
@@ -92,7 +51,49 @@ const AudioVisualizer = ({ stream, isRecording }) => {
     };
 
     draw();
+  }, []);
+
+  const setupAudioAnalysis = useCallback(() => {
+    try {
+      // Create audio context
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      audioContextRef.current = new AudioContext();
+      
+      // Create analyser node
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      analyserRef.current.fftSize = 256;
+      analyserRef.current.smoothingTimeConstant = 0.8;
+      
+      // Connect stream to analyser
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      source.connect(analyserRef.current);
+      
+      // Start visualization
+      visualize();
+    } catch (error) {
+      console.error('Error setting up audio analysis:', error);
+    }
+  }, [stream, visualize]);
+
+  useEffect(() => {
+    if (stream && isRecording) {
+      setupAudioAnalysis();
+    } else {
+      cleanup();
+    }
+
+    return cleanup;
+  }, [stream, isRecording, setupAudioAnalysis]);
+
+  const cleanup = () => {
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+    }
   };
+
 
   const getAudioLevelColor = () => {
     if (audioLevel < 20) return '#4caf50';

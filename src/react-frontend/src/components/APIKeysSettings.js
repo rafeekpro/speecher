@@ -62,10 +62,6 @@ const APIKeysSettings = () => {
     }
   });
 
-  useEffect(() => {
-    loadProviders();
-  }, [loadProviders]);
-
   const loadProviders = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/keys`);
@@ -81,6 +77,10 @@ const APIKeysSettings = () => {
       console.error('Error loading providers:', error);
     }
   }, []);
+
+  useEffect(() => {
+    loadProviders();
+  }, [loadProviders]);
 
   const loadProviderKeys = async (provider) => {
     try {
