@@ -7,7 +7,6 @@ import {
   FileText,
   PieChart,
   BarChart,
-  Users,
   Globe
 } from 'lucide-react';
 import './Statistics.css';

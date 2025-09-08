@@ -3,7 +3,6 @@ import { getTranscriptionHistory, deleteTranscription, getTranscriptionById } fr
 import { 
   Search, 
   Calendar, 
-  Filter, 
   Trash2, 
   Eye, 
   Download,

@@ -1,8 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
-  Card,
-  CardContent,
   Typography,
   TextField,
   Button,
@@ -28,7 +26,6 @@ import {
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
   Delete as DeleteIcon,
-  Edit as EditIcon,
   ExpandMore as ExpandMoreIcon,
   ExpandLess as ExpandLessIcon,
   CloudQueue as CloudIcon,
@@ -65,11 +62,7 @@ const APIKeysSettings = () => {
     }
   });
 
-  useEffect(() => {
-    loadProviders();
-  }, []);
-
-  const loadProviders = async () => {
+  const loadProviders = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE_URL}/api/keys`);
       setProviders(response.data);
@@ -83,7 +76,11 @@ const APIKeysSettings = () => {
     } catch (error) {
       console.error('Error loading providers:', error);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    loadProviders();
+  }, [loadProviders]);
 
   const loadProviderKeys = async (provider) => {
     try {

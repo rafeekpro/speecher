@@ -3,21 +3,24 @@ Integration tests for MongoDB and end-to-end API flows
 """
 import pytest
 import asyncio
+import os
 from datetime import datetime, timedelta
 from bson.objectid import ObjectId
-import mongomock
-from unittest.mock import patch, Mock, AsyncMock
+from unittest.mock import patch, Mock
 import sys
-import os
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+# Set testing environment
+os.environ["TESTING"] = "true"
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Mock cloud service modules before importing backend
 from tests.cloud_mocks import MockAWSService, MockAzureService, MockGCPService, MockTranscription
-sys.modules['speecher.aws'] = MockAWSService
-sys.modules['speecher.azure'] = MockAzureService
-sys.modules['speecher.gcp'] = MockGCPService
-sys.modules['speecher.transcription'] = MockTranscription
+
+sys.modules["speecher.aws"] = MockAWSService
+sys.modules["speecher.azure"] = MockAzureService
+sys.modules["speecher.gcp"] = MockGCPService
+sys.modules["speecher.transcription"] = MockTranscription
 
 from fastapi.testclient import TestClient
 from backend.main import app
@@ -27,13 +30,13 @@ client = TestClient(app)
 
 class TestMongoDBIntegration:
     """Integration tests for MongoDB operations"""
-    
+
     @pytest.fixture
     def setup_database(self, mock_mongodb):
         """Setup test database with sample data"""
-        db = mock_mongodb['test_speecher']
-        collection = db['transcriptions']
-        
+        db = mock_mongodb["test_speecher"]
+        collection = db["transcriptions"]
+
         # Insert sample data
         sample_data = [
             {
@@ -43,99 +46,88 @@ class TestMongoDBIntegration:
                 "transcript": f"Test transcription {i}",
                 "duration": 10.0 * (i + 1),
                 "cost_estimate": 0.024 * (i + 1) / 6,
-                "created_at": datetime.utcnow() - timedelta(days=i)
+                "created_at": datetime.utcnow() - timedelta(days=i),
             }
             for i in range(5)
         ]
-        
+
         collection.insert_many(sample_data)
         return collection
-    
-    @patch('backend.main.collection')
+
+    @patch("backend.main.collection")
     def test_history_pagination(self, mock_collection, setup_database):
         """Test history endpoint with pagination"""
         mock_collection.find.return_value.sort.return_value.limit.return_value = setup_database.find()
-        
+
         # Test different page sizes
         response = client.get("/history?limit=2")
         assert response.status_code == 200
         # Note: Mock returns all setup data regardless of limit
         # assert len(response.json()) <= 2
-        
+
         response = client.get("/history?limit=10")
         assert response.status_code == 200
         assert len(response.json()) <= 10
-    
-    @patch('backend.main.collection')
+
+    @patch("backend.main.collection")
     def test_concurrent_transcriptions(self, mock_collection):
         """Test handling of concurrent transcription requests"""
         mock_collection.insert_one.return_value = Mock(inserted_id=ObjectId())
-        
+
         async def mock_transcribe():
-            with patch('backend.main.process_aws_transcription') as mock_process:
-                mock_process.return_value = {
-                    "transcript": "Concurrent test",
-                    "speakers": [],
-                    "duration": 5.0
-                }
-                
+            with patch("backend.main.process_aws_transcription") as mock_process:
+                mock_process.return_value = {"transcript": "Concurrent test", "speakers": [], "duration": 5.0}
+
                 response = client.post(
                     "/transcribe",
-                    files={"file": ("test.wav", b"audio", "audio/wav")},
-                    data={"provider": "aws", "language": "en-US"}
+                    files={"file": ("test.wav", b"test audio content", "audio/wav")},
+                    data={"provider": "aws", "language": "en-US"},
                 )
                 return response
-        
+
         # Simulate concurrent requests
         responses = []
         for _ in range(3):
             response = asyncio.run(mock_transcribe())
             responses.append(response)
-        
+
         # All should succeed
         for response in responses:
             assert response.status_code == 200
-    
-    @patch('backend.main.collection')
+
+    @patch("backend.main.collection")
     def test_database_transaction_rollback(self, mock_collection):
         """Test rollback on database error"""
         # First call succeeds, second fails
-        mock_collection.insert_one.side_effect = [
-            Mock(inserted_id=ObjectId()),
-            Exception("Database connection lost")
-        ]
-        
-        with patch('backend.main.process_aws_transcription') as mock_process:
-            mock_process.return_value = {
-                "transcript": "Test",
-                "speakers": [],
-                "duration": 1.0
-            }
-            
+        mock_collection.insert_one.side_effect = [Mock(inserted_id=ObjectId()), Exception("Database connection lost")]
+
+        with patch("backend.main.process_aws_transcription") as mock_process:
+            mock_process.return_value = {"transcript": "Test", "speakers": [], "duration": 1.0}
+
             # First request should succeed
             response1 = client.post(
                 "/transcribe",
-                files={"file": ("test1.wav", b"audio", "audio/wav")},
-                data={"provider": "aws", "language": "en-US"}
+                files={"file": ("test1.wav", b"test audio content", "audio/wav")},
+                data={"provider": "aws", "language": "en-US"},
             )
             assert response1.status_code == 200
-            
-            # Second request should fail
+
+            # Second request should fail due to database error
             response2 = client.post(
                 "/transcribe",
-                files={"file": ("test2.wav", b"audio", "audio/wav")},
-                data={"provider": "aws", "language": "en-US"}
+                files={"file": ("test2.wav", b"test audio content", "audio/wav")},
+                data={"provider": "aws", "language": "en-US"},
             )
             assert response2.status_code == 500
 
 
 class TestEndToEndFlows:
     """End-to-end testing of complete workflows"""
-    
+
     @pytest.mark.skip(reason="Mock setup needs fixing")
-    @patch('backend.main.collection')
-    @patch('backend.main.aws_service')
-    @patch('backend.main.process_transcription_data')
+    @patch("backend.main.collection")
+    @patch("backend.main.aws_service")
+    @patch("backend.main.process_transcription_data")
     def test_complete_aws_workflow(self, mock_process, mock_aws, mock_collection):
         """Test complete AWS transcription workflow"""
         # Setup mocks
@@ -144,86 +136,72 @@ class TestEndToEndFlows:
             "_id": ObjectId("507f1f77bcf86cd799439011"),
             "filename": "test.wav",
             "transcript": "Complete workflow test",
-            "created_at": datetime.utcnow()
+            "created_at": datetime.utcnow(),
         }
         mock_collection.delete_one.return_value = Mock(deleted_count=1)
-        
-        mock_aws.upload_file_to_s3.return_value = True
+
+        mock_aws.upload_file_to_s3.return_value = (True, "test-bucket")
         mock_aws.start_transcription_job.return_value = {"JobName": "test-job"}
         mock_aws.wait_for_job_completion.return_value = {
-            'TranscriptionJob': {
-                'Transcript': {'TranscriptFileUri': 'https://test.uri'}
-            }
+            "TranscriptionJob": {"Transcript": {"TranscriptFileUri": "https://test.uri"}}
         }
         mock_aws.download_transcription_result.return_value = {"results": {}}
-        mock_process.return_value = {
-            "transcript": "Complete workflow test",
-            "speakers": [],
-            "duration": 10.0
-        }
-        
+        mock_process.return_value = {"transcript": "Complete workflow test", "speakers": [], "duration": 10.0}
+
         # 1. Upload and transcribe
         response = client.post(
             "/transcribe",
-            files={"file": ("test.wav", b"audio content", "audio/wav")},
-            data={
-                "provider": "aws",
-                "language": "en-US",
-                "enable_diarization": "true"
-            }
+            files={"file": ("test.wav", b"test audio content", "audio/wav")},
+            data={"provider": "aws", "language": "en-US", "enable_diarization": "true"},
         )
-        
+
         assert response.status_code == 200
         transcription_id = response.json()["id"]
-        
+
         # 2. Get transcription details
         response = client.get(f"/transcription/{transcription_id}")
         assert response.status_code == 200
         assert response.json()["transcript"] == "Complete workflow test"
-        
+
         # 3. Check in history
         mock_cursor = Mock()
         mock_cursor.sort.return_value = mock_cursor
         mock_cursor.limit.return_value = [mock_collection.find_one.return_value]
         mock_collection.find.return_value = mock_cursor
-        
+
         response = client.get("/history")
         assert response.status_code == 200
-        
+
         # 4. Delete transcription
         response = client.delete(f"/transcription/{transcription_id}")
         assert response.status_code == 200
-    
-    @patch('backend.main.collection')
+
+    @patch("backend.main.collection")
     def test_multi_provider_comparison(self, mock_collection):
         """Test transcribing same file with different providers"""
         mock_collection.insert_one.return_value = Mock(inserted_id=ObjectId())
-        
+
         providers = ["aws", "azure", "gcp"]
         results = []
-        
+
         for provider in providers:
-            with patch(f'backend.main.process_{provider}_transcription') as mock_process:
-                mock_process.return_value = {
-                    "transcript": f"Test from {provider}",
-                    "speakers": [],
-                    "duration": 5.0
-                }
-                
+            with patch(f"backend.main.process_{provider}_transcription") as mock_process:
+                mock_process.return_value = {"transcript": f"Test from {provider}", "speakers": [], "duration": 5.0}
+
                 response = client.post(
                     "/transcribe",
-                    files={"file": ("test.wav", b"audio", "audio/wav")},
-                    data={"provider": provider, "language": "en-US"}
+                    files={"file": ("test.wav", b"test audio content", "audio/wav")},
+                    data={"provider": provider, "language": "en-US"},
                 )
-                
+
                 assert response.status_code == 200
                 results.append(response.json())
-        
+
         # Verify all providers processed successfully
         assert len(results) == 3
         assert all(r["provider"] in providers for r in results)
-    
-    @patch('backend.main.collection')
+
+    @patch("backend.main.collection")
     def test_statistics_aggregation(self, mock_collection):
         """Test statistics aggregation across providers"""
         # Setup mock data
@@ -231,22 +209,22 @@ class TestEndToEndFlows:
         mock_collection.aggregate.return_value = [
             {"_id": "aws", "count": 75, "total_duration": 3000, "total_cost": 72.0},
             {"_id": "azure", "count": 50, "total_duration": 2000, "total_cost": 32.0},
-            {"_id": "gcp", "count": 25, "total_duration": 1000, "total_cost": 18.0}
+            {"_id": "gcp", "count": 25, "total_duration": 1000, "total_cost": 18.0},
         ]
         mock_collection.find.return_value.sort.return_value.limit.return_value = [
             {"filename": f"recent_{i}.wav"} for i in range(5)
         ]
-        
+
         response = client.get("/stats")
         assert response.status_code == 200
-        
+
         stats = response.json()
         assert stats["total_transcriptions"] == 150
-        
+
         # Verify cost calculations
         total_cost = sum(p["total_cost"] for p in stats["provider_statistics"])
         assert total_cost == 122.0  # 72 + 32 + 18
-        
+
         # Verify provider distribution
         aws_stats = next(p for p in stats["provider_statistics"] if p["_id"] == "aws")
         assert aws_stats["count"] == 75
@@ -255,54 +233,51 @@ class TestEndToEndFlows:
 
 class TestErrorRecovery:
     """Test error recovery and resilience"""
-    
-    @patch('backend.main.aws_service')
+
+    @patch("backend.main.aws_service")
     def test_s3_upload_retry(self, mock_aws):
         """Test retry logic for S3 upload failures"""
-        # Simulate intermittent failure
-        mock_aws.upload_file_to_s3.side_effect = [False, False, True]
-        
+        # Simulate intermittent failure - upload_file_to_s3 returns tuple (success, bucket)
+        mock_aws.upload_file_to_s3.side_effect = [(False, ""), (False, ""), (False, "")]
+
         response = client.post(
             "/transcribe",
-            files={"file": ("test.wav", b"audio", "audio/wav")},
-            data={"provider": "aws", "language": "en-US"}
+            files={"file": ("test.wav", b"test audio content", "audio/wav")},
+            data={"provider": "aws", "language": "en-US"},
         )
-        
+
         # Should fail after retries exhausted
         assert response.status_code == 500
-    
+
     @pytest.mark.skip(reason="Cleanup logic needs to be fixed in main code")
-    @patch('backend.main.collection')
-    @patch('backend.main.aws_service')
+    @patch("backend.main.collection")
+    @patch("backend.main.aws_service")
     def test_cleanup_on_failure(self, mock_aws, mock_collection):
         """Test resource cleanup on transcription failure"""
-        mock_aws.upload_file_to_s3.return_value = True
+        mock_aws.upload_file_to_s3.return_value = (True, "test-bucket")
         mock_aws.start_transcription_job.side_effect = Exception("API Error")
         mock_aws.delete_file_from_s3.return_value = True
-        
+
         response = client.post(
             "/transcribe",
-            files={"file": ("test.wav", b"audio", "audio/wav")},
-            data={"provider": "aws", "language": "en-US"}
+            files={"file": ("test.wav", b"test audio content", "audio/wav")},
+            data={"provider": "aws", "language": "en-US"},
         )
-        
+
         assert response.status_code == 500
         # Verify cleanup was attempted
         mock_aws.delete_file_from_s3.assert_called()
-    
-    @patch('backend.main.mongo_client')
+
+    @patch("backend.main.mongo_client")
     def test_mongodb_reconnection(self, mock_mongo):
         """Test MongoDB reconnection after connection loss"""
         # Simulate connection loss and recovery
-        mock_mongo.admin.command.side_effect = [
-            Exception("Connection lost"),
-            True  # Reconnected
-        ]
-        
+        mock_mongo.admin.command.side_effect = [Exception("Connection lost"), True]  # Reconnected
+
         # First check should fail
         response = client.get("/db/health")
         assert response.status_code == 503
-        
+
         # Second check should succeed
         response = client.get("/db/health")
         assert response.status_code == 200
@@ -310,32 +285,32 @@ class TestErrorRecovery:
 
 class TestPerformance:
     """Performance and load testing"""
-    
-    @patch('backend.main.collection')
+
+    @patch("backend.main.collection")
     def test_large_file_handling(self, mock_collection):
         """Test handling of large audio files"""
         mock_collection.insert_one.return_value = Mock(inserted_id=ObjectId())
-        
-        # Create a large file (10MB)
-        large_file = b"0" * (10 * 1024 * 1024)
-        
-        with patch('backend.main.process_aws_transcription') as mock_process:
+
+        # Create a large test file (10MB) with test pattern
+        large_file = b"test " + b"0" * (10 * 1024 * 1024 - 5)
+
+        with patch("backend.main.process_aws_transcription") as mock_process:
             mock_process.return_value = {
                 "transcript": "Large file test",
                 "speakers": [],
-                "duration": 600.0  # 10 minutes
+                "duration": 600.0,  # 10 minutes
             }
-            
+
             response = client.post(
                 "/transcribe",
                 files={"file": ("large.wav", large_file, "audio/wav")},
-                data={"provider": "aws", "language": "en-US"}
+                data={"provider": "aws", "language": "en-US"},
             )
-            
+
             assert response.status_code == 200
             assert response.json()["duration"] == 600.0
-    
-    @patch('backend.main.collection')
+
+    @patch("backend.main.collection")
     def test_history_with_large_dataset(self, mock_collection):
         """Test history endpoint with large dataset"""
         # Create 1000 mock records
@@ -344,42 +319,43 @@ class TestPerformance:
                 "_id": ObjectId(),
                 "filename": f"file_{i}.wav",
                 "created_at": datetime.utcnow() - timedelta(hours=i),
-                "transcript": f"Transcript {i}"
+                "transcript": f"Transcript {i}",
             }
             for i in range(1000)
         ]
-        
+
         mock_cursor = Mock()
         mock_cursor.sort.return_value = mock_cursor
         mock_cursor.limit.return_value = large_dataset[:50]  # Return first 50
         mock_collection.find.return_value = mock_cursor
-        
+
         response = client.get("/history?limit=50")
         assert response.status_code == 200
         assert len(response.json()) == 50
-    
-    @patch('backend.main.collection')
+
+    @patch("backend.main.collection")
     def test_concurrent_history_requests(self, mock_collection):
         """Test concurrent history requests"""
         mock_cursor = Mock()
         mock_cursor.sort.return_value = mock_cursor
         mock_cursor.limit.return_value = []
         mock_collection.find.return_value = mock_cursor
-        
+
         # Simulate 10 concurrent requests
         import threading
+
         results = []
-        
+
         def make_request():
             response = client.get("/history")
             results.append(response.status_code)
-        
+
         threads = [threading.Thread(target=make_request) for _ in range(10)]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
-        
+
         # All requests should succeed
         assert all(status == 200 for status in results)
         assert len(results) == 10

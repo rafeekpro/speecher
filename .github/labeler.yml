@@ -1,0 +1,60 @@
+# Configuration for auto-labeling PRs
+
+frontend:
+  - src/components/**/*
+  - src/pages/**/*
+  - src/hooks/**/*
+  - src/contexts/**/*
+  - src/styles/**/*
+
+backend:
+  - src/backend/**/*
+  - src/api/**/*
+  - api/**/*
+
+tests:
+  - '**/*.test.ts'
+  - '**/*.test.tsx'
+  - '**/*.spec.ts'
+  - '**/*.spec.tsx'
+  - tests/**/*
+  - __tests__/**/*
+
+documentation:
+  - '**/*.md'
+  - docs/**/*
+
+dependencies:
+  - package.json
+  - package-lock.json
+  - yarn.lock
+  - requirements.txt
+  - Pipfile
+  - Pipfile.lock
+  - pyproject.toml
+
+ci/cd:
+  - .github/workflows/*
+  - .github/actions/*
+  - .gitlab-ci.yml
+  - .circleci/*
+
+docker:
+  - Dockerfile
+  - docker-compose.yml
+  - docker-compose.yaml
+  - .dockerignore
+
+auth:
+  - src/components/auth/**/*
+  - src/contexts/AuthContext.*
+  - src/hooks/useAuth.*
+
+projects:
+  - src/components/projects/**/*
+  - src/contexts/ProjectContext.*
+  - src/hooks/useProjects.*
+
+recordings:
+  - src/components/recordings/**/*
+  - src/hooks/useRecordings.*

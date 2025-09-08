@@ -206,8 +206,10 @@ export const getSupportedMimeType = () => {
   return 'audio/webm'; // Default fallback
 };
 
-export default {
+const audioConverter = {
   convertWebMToWav,
   recordAsWav,
   getSupportedMimeType
 };
+
+export default audioConverter;

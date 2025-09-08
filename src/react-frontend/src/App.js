@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import {
@@ -37,7 +37,7 @@ import TranscriptionResults from './components/TranscriptionResults';
 import History from './components/History';
 import Statistics from './components/Statistics';
 import Settings from './components/Settings';
-import { transcribeAudio, checkHealth, getProviders } from './services/api';
+import { transcribeAudio, checkHealth } from './services/api';
 
 // Create MUI theme
 const theme = createTheme({
@@ -139,23 +139,12 @@ function App() {
   });
   const [showSettings, setShowSettings] = useState(false);
 
-  useEffect(() => {
-    // Check backend health on mount
-    checkBackendHealth();
-    loadConfiguredProviders();
-    const interval = setInterval(() => {
-      checkBackendHealth();
-      loadConfiguredProviders();
-    }, 30000); // Check every 30s
-    return () => clearInterval(interval);
-  }, []);
-
-  const checkBackendHealth = async () => {
+  const checkBackendHealth = useCallback(async () => {
     const health = await checkHealth();
     setBackendStatus(health.status === 'healthy' ? 'healthy' : 'unhealthy');
-  };
+  }, []);
 
-  const loadConfiguredProviders = async () => {
+  const loadConfiguredProviders = useCallback(async () => {
     try {
       const response = await fetch('http://localhost:8000/api/keys');
       if (response.ok) {
@@ -174,7 +163,18 @@ function App() {
     } catch (error) {
       console.error('Failed to load configured providers:', error);
     }
-  };
+  }, [settings.provider]);
+
+  useEffect(() => {
+    // Check backend health on mount
+    checkBackendHealth();
+    loadConfiguredProviders();
+    const interval = setInterval(() => {
+      checkBackendHealth();
+      loadConfiguredProviders();
+    }, 30000); // Check every 30s
+    return () => clearInterval(interval);
+  }, [checkBackendHealth, loadConfiguredProviders]);
 
   const handleAudioRecorded = async (audioBlob, fileName = 'recording.wav') => {
     // Check if provider is configured
