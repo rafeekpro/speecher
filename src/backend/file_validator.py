@@ -19,13 +19,11 @@ class FileValidationError(Exception):
     pass
 
 # Magic bytes for different audio formats
+# Note: M4A/MP4 and WebM require special handling due to offset, so they're not in this dict
+# MP3 without ID3 also requires 2-byte check, so only ID3 version is here
 AUDIO_MAGIC_BYTES = {
-    b"RIFF": AudioFormat.WAV,  # WAV files
+    b"RIFF": AudioFormat.WAV,  # WAV files (needs additional WAVE check)
     b"ID3": AudioFormat.MP3,   # MP3 with ID3 tag
-    b"\xff\xfb": AudioFormat.MP3,  # MP3 without ID3
-    b"\xff\xf3": AudioFormat.MP3,  # MP3 without ID3
-    b"\xff\xf2": AudioFormat.MP3,  # MP3 without ID3
-    b"ftyp": AudioFormat.M4A,  # M4A/MP4 (check at offset 4)
     b"fLaC": AudioFormat.FLAC, # FLAC
     b"OggS": AudioFormat.OGG,  # OGG Vorbis
 }
@@ -42,31 +40,28 @@ def detect_audio_format(file_content: bytes) -> Optional[AudioFormat]:
     if not file_content or len(file_content) < 12:
         return None
     
-    # Check for WAV
+    # Special case: WAV needs additional WAVE check
     if file_content[:4] == b"RIFF" and file_content[8:12] == b"WAVE":
         return AudioFormat.WAV
     
-    # Check for MP3
-    if file_content[:3] == b"ID3":
-        return AudioFormat.MP3
+    # Check simple magic bytes from dictionary
+    for magic_bytes, audio_format in AUDIO_MAGIC_BYTES.items():
+        if magic_bytes == b"RIFF":  # Already handled above
+            continue
+        if file_content.startswith(magic_bytes):
+            return audio_format
+    
+    # Special case: MP3 without ID3 tag (2-byte check for various MP3 sync words)
     if file_content[:2] in [b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"]:
         return AudioFormat.MP3
     
-    # Check for M4A/MP4
+    # Special case: M4A/MP4 (check at offset 4)
     if len(file_content) > 11 and file_content[4:8] == b"ftyp":
         ftyp = file_content[8:12]
         if ftyp in [b"M4A ", b"mp42", b"isom", b"mp41"]:
             return AudioFormat.M4A
     
-    # Check for FLAC
-    if file_content[:4] == b"fLaC":
-        return AudioFormat.FLAC
-    
-    # Check for OGG
-    if file_content[:4] == b"OggS":
-        return AudioFormat.OGG
-    
-    # Check for WebM
+    # Special case: WebM
     if file_content[:4] == b"\x1a\x45\xdf\xa3":
         return AudioFormat.WEBM
     
