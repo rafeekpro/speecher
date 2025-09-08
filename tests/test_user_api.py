@@ -118,7 +118,7 @@ class TestUserManagementAPI:
 
         assert response.status_code == 401
         data = response.json()
-        assert "incorrect" in data["message"].lower()
+        assert "incorrect" in data["detail"].lower()
 
     def test_change_password_weak_new(self, authenticated_client):
         """Test changing to weak password"""
@@ -198,7 +198,7 @@ class TestUserManagementAPI:
 
         assert response.status_code == 404
         data = response.json()
-        assert "not found" in data["message"].lower()
+        assert "not found" in data["detail"].lower()
 
     def test_api_key_authentication(self, client: TestClient):
         """Test authenticating with API key"""
@@ -252,15 +252,14 @@ class TestUserManagementAPI:
 
         assert response.status_code == 401
         data = response.json()
-        assert "expired" in data["message"].lower()
+        assert "expired" in data["detail"].lower()
 
     def test_delete_user_account(self, authenticated_client):
         """Test deleting user account"""
         client, headers, email = authenticated_client
 
         # Delete account
-        delete_data = {"password": "SecurePass123!"}
-        response = client.delete("/api/users/account", json=delete_data, headers=headers)
+        response = client.delete("/api/users/account?password=SecurePass123!", headers=headers)
 
         assert response.status_code == 200
         data = response.json()
@@ -274,12 +273,11 @@ class TestUserManagementAPI:
         """Test deleting account with wrong password"""
         client, headers, email = authenticated_client
 
-        delete_data = {"password": "WrongPassword123!"}
-        response = client.delete("/api/users/account", json=delete_data, headers=headers)
+        response = client.delete("/api/users/account?password=WrongPassword123!", headers=headers)
 
         assert response.status_code == 401
         data = response.json()
-        assert "incorrect" in data["message"].lower()
+        assert "incorrect" in data["detail"].lower()
 
     def test_user_activity_log(self, authenticated_client):
         """Test getting user activity log"""

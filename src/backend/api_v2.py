@@ -22,6 +22,7 @@ from src.backend.models import (
     RecordingCreateRequest,
     RecordingResponse,
     RecordingListResponse,
+    TagsRequest,
 )
 from src.backend.auth import (
     create_user,
@@ -30,6 +31,7 @@ from src.backend.auth import (
     create_refresh_token,
     decode_token,
     get_current_user,
+    require_auth,
     check_rate_limit,
     delete_user,
     create_api_key,
@@ -173,7 +175,7 @@ async def revoke_session(session_id: str, current_user: UserResponse = Depends(g
 
 
 @users_router.get("/profile", response_model=UserResponse)
-async def get_profile(current_user: UserResponse = Depends(get_current_user)):
+async def get_profile(current_user: UserResponse = Depends(require_auth)):
     """Get current user profile"""
     return current_user
 
@@ -237,7 +239,7 @@ async def change_password(request: PasswordChangeRequest, current_user: UserResp
 
 
 @users_router.post("/api-keys", response_model=ApiKeyResponse, status_code=status.HTTP_201_CREATED)
-async def create_user_api_key(request: ApiKeyCreateRequest, current_user: UserResponse = Depends(get_current_user)):
+async def create_user_api_key(request: ApiKeyCreateRequest, current_user: UserResponse = Depends(require_auth)):
     """Create a new API key"""
     key, api_key_db = create_api_key(user_id=current_user.id, name=request.name, expires_at=request.expires_at)
 
@@ -473,7 +475,7 @@ async def get_tags(project_id: str, current_user: UserResponse = Depends(get_cur
 
 
 @projects_router.post("/{project_id}/tags")
-async def add_tags(project_id: str, tags: List[str], current_user: UserResponse = Depends(get_current_user)):
+async def add_tags(project_id: str, request: TagsRequest, current_user: UserResponse = Depends(get_current_user)):
     """Add tags to project"""
     project = get_project_by_id(project_id)
 
@@ -484,12 +486,12 @@ async def add_tags(project_id: str, tags: List[str], current_user: UserResponse 
     if project.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-    updated_tags = add_tags_to_project(project_id, tags)
+    updated_tags = add_tags_to_project(project_id, request.tags)
     return {"tags": updated_tags}
 
 
 @projects_router.delete("/{project_id}/tags")
-async def remove_tags(project_id: str, tags: List[str], current_user: UserResponse = Depends(get_current_user)):
+async def remove_tags(project_id: str, request: TagsRequest, current_user: UserResponse = Depends(get_current_user)):
     """Remove tags from project"""
     project = get_project_by_id(project_id)
 
@@ -500,7 +502,7 @@ async def remove_tags(project_id: str, tags: List[str], current_user: UserRespon
     if project.user_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-    updated_tags = remove_tags_from_project(project_id, tags)
+    updated_tags = remove_tags_from_project(project_id, request.tags)
     return {"tags": updated_tags}
 
 

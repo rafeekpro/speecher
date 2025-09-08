@@ -22,7 +22,7 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Security schemes
-bearer_scheme = HTTPBearer()
+bearer_scheme = HTTPBearer(auto_error=False)
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 # In-memory storage (replace with database in production)
@@ -201,7 +201,7 @@ def get_current_user_optional(
 
 
 def require_auth(
-    credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
     api_key: Optional[str] = Security(api_key_header),
 ) -> UserDB:
     """Require authentication via JWT or API key.
@@ -239,7 +239,7 @@ def get_user_by_api_key(api_key: str) -> Optional[UserDB]:
 
     # Check expiration
     if api_key_db.expires_at and api_key_db.expires_at < datetime.utcnow():
-        return None
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="API key has expired")
 
     # Update last used
     api_key_db.last_used = datetime.utcnow()

@@ -137,7 +137,7 @@ class TestProjectManagementAPI:
 
         assert response.status_code == 404
         data = response.json()
-        assert "not found" in data["message"].lower()
+        assert "not found" in data["detail"].lower()
 
     def test_update_project(self, auth_client_with_user):
         """Test updating project"""

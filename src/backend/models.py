@@ -187,6 +187,12 @@ class RecordingListResponse(BaseModel):
     per_page: int
 
 
+class TagsRequest(BaseModel):
+    """Request model for adding/removing tags"""
+    
+    tags: List[str]
+
+
 class TagResponse(BaseModel):
     """Tag response model"""
 
