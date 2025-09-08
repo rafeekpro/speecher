@@ -1,6 +1,7 @@
 """Tests for project management API endpoints"""
 
 import pytest
+import uuid
 from fastapi.testclient import TestClient
 from typing import Dict, Tuple
 
@@ -11,8 +12,12 @@ class TestProjectManagementAPI:
     @pytest.fixture
     def auth_client_with_user(self, client: TestClient) -> Tuple[TestClient, Dict[str, str], str]:
         """Create authenticated client with user ID"""
+        # Generate unique email for each test
+        unique_id = str(uuid.uuid4())[:8]
+        email = f"project_user_{unique_id}@example.com"
+        
         # Register user
-        register_data = {"email": "project_user@example.com", "password": "SecurePass123!", "full_name": "Project User"}
+        register_data = {"email": email, "password": "SecurePass123!", "full_name": "Project User"}
         reg_response = client.post("/api/auth/register", json=register_data)
         assert reg_response.status_code == 201, f"Registration failed: {reg_response.json()}"
 
@@ -21,7 +26,7 @@ class TestProjectManagementAPI:
         user_id = user_data["id"]
 
         # Login
-        login_data = {"email": "project_user@example.com", "password": "SecurePass123!"}
+        login_data = {"email": email, "password": "SecurePass123!"}
         login_response = client.post("/api/auth/login", json=login_data)
         assert login_response.status_code == 200, f"Login failed: {login_response.json()}"
 
