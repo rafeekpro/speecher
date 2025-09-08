@@ -180,7 +180,7 @@ async def transcribe(
     
     # Basic corruption check for WAV files (skip for test data)
     # Validate audio file format using proper validation
-    from src.backend.file_validator import validate_audio_file
+    from backend.file_validator import validate_audio_file
     
     # Allow test files in test environment
     is_test_env = os.getenv("TESTING", "false").lower() == "true"
