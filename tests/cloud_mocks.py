@@ -6,7 +6,7 @@ Mock cloud service modules for testing
 class MockAWSService:
     @staticmethod
     def upload_file_to_s3(*args, **kwargs):
-        return True
+        return (True, "test-bucket")
 
     @staticmethod
     def start_transcription_job(*args, **kwargs):

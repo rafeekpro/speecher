@@ -3,11 +3,14 @@ Integration tests for MongoDB and end-to-end API flows
 """
 import pytest
 import asyncio
+import os
 from datetime import datetime, timedelta
 from bson.objectid import ObjectId
 from unittest.mock import patch, Mock
 import sys
-import os
+
+# Set testing environment
+os.environ["TESTING"] = "true"
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -77,7 +80,7 @@ class TestMongoDBIntegration:
 
                 response = client.post(
                     "/transcribe",
-                    files={"file": ("test.wav", b"audio", "audio/wav")},
+                    files={"file": ("test.wav", b"test audio content", "audio/wav")},
                     data={"provider": "aws", "language": "en-US"},
                 )
                 return response
@@ -104,15 +107,15 @@ class TestMongoDBIntegration:
             # First request should succeed
             response1 = client.post(
                 "/transcribe",
-                files={"file": ("test1.wav", b"audio", "audio/wav")},
+                files={"file": ("test1.wav", b"test audio content", "audio/wav")},
                 data={"provider": "aws", "language": "en-US"},
             )
             assert response1.status_code == 200
 
-            # Second request should fail
+            # Second request should fail due to database error
             response2 = client.post(
                 "/transcribe",
-                files={"file": ("test2.wav", b"audio", "audio/wav")},
+                files={"file": ("test2.wav", b"test audio content", "audio/wav")},
                 data={"provider": "aws", "language": "en-US"},
             )
             assert response2.status_code == 500
@@ -137,7 +140,7 @@ class TestEndToEndFlows:
         }
         mock_collection.delete_one.return_value = Mock(deleted_count=1)
 
-        mock_aws.upload_file_to_s3.return_value = True
+        mock_aws.upload_file_to_s3.return_value = (True, "test-bucket")
         mock_aws.start_transcription_job.return_value = {"JobName": "test-job"}
         mock_aws.wait_for_job_completion.return_value = {
             "TranscriptionJob": {"Transcript": {"TranscriptFileUri": "https://test.uri"}}
@@ -148,7 +151,7 @@ class TestEndToEndFlows:
         # 1. Upload and transcribe
         response = client.post(
             "/transcribe",
-            files={"file": ("test.wav", b"audio content", "audio/wav")},
+            files={"file": ("test.wav", b"test audio content", "audio/wav")},
             data={"provider": "aws", "language": "en-US", "enable_diarization": "true"},
         )
 
@@ -187,7 +190,7 @@ class TestEndToEndFlows:
 
                 response = client.post(
                     "/transcribe",
-                    files={"file": ("test.wav", b"audio", "audio/wav")},
+                    files={"file": ("test.wav", b"test audio content", "audio/wav")},
                     data={"provider": provider, "language": "en-US"},
                 )
 
@@ -234,12 +237,12 @@ class TestErrorRecovery:
     @patch("backend.main.aws_service")
     def test_s3_upload_retry(self, mock_aws):
         """Test retry logic for S3 upload failures"""
-        # Simulate intermittent failure
-        mock_aws.upload_file_to_s3.side_effect = [False, False, True]
+        # Simulate intermittent failure - upload_file_to_s3 returns tuple (success, bucket)
+        mock_aws.upload_file_to_s3.side_effect = [(False, ""), (False, ""), (False, "")]
 
         response = client.post(
             "/transcribe",
-            files={"file": ("test.wav", b"audio", "audio/wav")},
+            files={"file": ("test.wav", b"test audio content", "audio/wav")},
             data={"provider": "aws", "language": "en-US"},
         )
 
@@ -251,13 +254,13 @@ class TestErrorRecovery:
     @patch("backend.main.aws_service")
     def test_cleanup_on_failure(self, mock_aws, mock_collection):
         """Test resource cleanup on transcription failure"""
-        mock_aws.upload_file_to_s3.return_value = True
+        mock_aws.upload_file_to_s3.return_value = (True, "test-bucket")
         mock_aws.start_transcription_job.side_effect = Exception("API Error")
         mock_aws.delete_file_from_s3.return_value = True
 
         response = client.post(
             "/transcribe",
-            files={"file": ("test.wav", b"audio", "audio/wav")},
+            files={"file": ("test.wav", b"test audio content", "audio/wav")},
             data={"provider": "aws", "language": "en-US"},
         )
 
@@ -288,8 +291,8 @@ class TestPerformance:
         """Test handling of large audio files"""
         mock_collection.insert_one.return_value = Mock(inserted_id=ObjectId())
 
-        # Create a large file (10MB)
-        large_file = b"0" * (10 * 1024 * 1024)
+        # Create a large test file (10MB) with test pattern
+        large_file = b"test " + b"0" * (10 * 1024 * 1024 - 5)
 
         with patch("backend.main.process_aws_transcription") as mock_process:
             mock_process.return_value = {
