@@ -4,8 +4,8 @@ on:
   pull_request:
     branches: [develop, main, feature/frontend-v2]
     paths:
-      - 'src/**'
-      - 'tests/**'
+      - 'src/frontend/**'
+      - 'tests/frontend/**'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'

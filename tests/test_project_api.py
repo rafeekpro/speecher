@@ -18,7 +18,11 @@ class TestProjectManagementAPI:
             "full_name": "Project User"
         }
         reg_response = client.post("/api/auth/register", json=register_data)
-        user_id = reg_response.json()["id"]
+        assert reg_response.status_code == 201, f"Registration failed: {reg_response.json()}"
+        
+        user_data = reg_response.json()
+        assert 'id' in user_data, f"No id in registration response: {user_data}"
+        user_id = user_data["id"]
         
         # Login
         login_data = {
@@ -26,7 +30,10 @@ class TestProjectManagementAPI:
             "password": "SecurePass123!"
         }
         login_response = client.post("/api/auth/login", json=login_data)
+        assert login_response.status_code == 200, f"Login failed: {login_response.json()}"
+        
         tokens = login_response.json()
+        assert 'access_token' in tokens, f"No access_token in response: {tokens}"
         
         headers = {"Authorization": f"Bearer {tokens['access_token']}"}
         return client, headers, user_id

@@ -6,6 +6,15 @@ from datetime import datetime
 from typing import Dict
 
 
+def get_error_message(response_json):
+    """Helper to extract error message from response"""
+    if "detail" in response_json:
+        if isinstance(response_json["detail"], dict):
+            return response_json["detail"].get("message", response_json["detail"].get("detail", ""))
+        return str(response_json["detail"])
+    return response_json.get("message", "")
+
+
 class TestUserManagementAPI:
     """Test suite for user management endpoints"""
     
@@ -18,7 +27,8 @@ class TestUserManagementAPI:
             "password": "SecurePass123!",
             "full_name": "Auth User"
         }
-        client.post("/api/auth/register", json=register_data)
+        reg_response = client.post("/api/auth/register", json=register_data)
+        assert reg_response.status_code == 201, f"Registration failed: {reg_response.json()}"
         
         # Login
         login_data = {
@@ -26,7 +36,10 @@ class TestUserManagementAPI:
             "password": "SecurePass123!"
         }
         login_response = client.post("/api/auth/login", json=login_data)
+        assert login_response.status_code == 200, f"Login failed: {login_response.json()}"
+        
         tokens = login_response.json()
+        assert 'access_token' in tokens, f"No access_token in response: {tokens}"
         
         headers = {"Authorization": f"Bearer {tokens['access_token']}"}
         return client, headers
@@ -85,7 +98,7 @@ class TestUserManagementAPI:
         
         assert response.status_code == 409
         data = response.json()
-        assert "already in use" in data["message"].lower()
+        assert "already in use" in get_error_message(data).lower()
     
     def test_change_password(self, authenticated_client):
         """Test changing user password"""
