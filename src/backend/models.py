@@ -1,11 +1,13 @@
 """Database models for Frontend 2.0"""
 
 from __future__ import annotations
+
 from datetime import datetime
-from typing import Optional, List
 from enum import Enum
-from pydantic import BaseModel, EmailStr, Field, ConfigDict
+from typing import List, Optional
 from uuid import uuid4
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 # Enums
@@ -189,7 +191,7 @@ class RecordingListResponse(BaseModel):
 
 class TagsRequest(BaseModel):
     """Request model for adding/removing tags"""
-    
+
     tags: List[str]
 
 

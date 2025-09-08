@@ -1,56 +1,57 @@
 """API v2 endpoints for user management and projects"""
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from typing import Optional, List
 from datetime import datetime
+from typing import List, Optional
 
-from src.backend.models import (
-    UserRegisterRequest,
-    UserLoginRequest,
-    UserLoginResponse,
-    TokenRefreshRequest,
-    TokenRefreshResponse,
-    UserResponse,
-    UserUpdateRequest,
-    PasswordChangeRequest,
-    ApiKeyCreateRequest,
-    ApiKeyResponse,
-    ProjectCreateRequest,
-    ProjectUpdateRequest,
-    ProjectResponse,
-    ProjectListResponse,
-    RecordingCreateRequest,
-    RecordingResponse,
-    RecordingListResponse,
-    TagsRequest,
-)
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
 from src.backend.auth import (
-    create_user,
     authenticate_user,
-    create_access_token,
-    create_refresh_token,
-    decode_token,
-    get_current_user,
-    require_auth,
     check_rate_limit,
-    delete_user,
+    create_access_token,
     create_api_key,
-    verify_password,
+    create_refresh_token,
+    create_user,
+    decode_token,
+    delete_user,
+    get_current_user,
     hash_password,
-    validate_password_strength,
+    require_auth,
     revoke_all_refresh_tokens,
+    validate_password_strength,
+    verify_password,
 )
 from src.backend.database import (
-    get_project_by_id,
-    get_user_projects,
-    create_project,
-    update_project,
-    delete_project,
-    get_project_recordings,
     add_recording_to_project,
-    get_project_tags,
     add_tags_to_project,
+    create_project,
+    delete_project,
+    get_project_by_id,
+    get_project_recordings,
+    get_project_tags,
+    get_user_projects,
     remove_tags_from_project,
+    update_project,
+)
+from src.backend.models import (
+    ApiKeyCreateRequest,
+    ApiKeyResponse,
+    PasswordChangeRequest,
+    ProjectCreateRequest,
+    ProjectListResponse,
+    ProjectResponse,
+    ProjectUpdateRequest,
+    RecordingCreateRequest,
+    RecordingListResponse,
+    RecordingResponse,
+    TagsRequest,
+    TokenRefreshRequest,
+    TokenRefreshResponse,
+    UserLoginRequest,
+    UserLoginResponse,
+    UserRegisterRequest,
+    UserResponse,
+    UserUpdateRequest,
 )
 
 # Create routers
@@ -183,7 +184,7 @@ async def get_profile(current_user: UserResponse = Depends(require_auth)):
 @users_router.put("/profile", response_model=UserResponse)
 async def update_profile(request: UserUpdateRequest, current_user: UserResponse = Depends(get_current_user)):
     """Update user profile"""
-    from src.backend.auth import users_db, get_user_by_email
+    from src.backend.auth import get_user_by_email, users_db
 
     # Check if email is being changed and if it's already taken
     if request.email and request.email != current_user.email:

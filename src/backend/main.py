@@ -4,22 +4,24 @@ FastAPI application for Speecher - Multi-cloud transcription service.
 This module provides endpoints to upload audio files, transcribe using AWS/Azure/GCP,
 and manage transcription history in MongoDB.
 """
-import os
-import sys
-import uuid
-import tempfile
+
 import datetime
 import logging
-from typing import Optional, List, Dict, Any
+import os
+import sys
+import tempfile
+import uuid
 from enum import Enum
+from typing import Any, Dict, List, Optional
+
+from bson import ObjectId
 
 # Load environment variables from .env file
-from dotenv import load_dotenv, find_dotenv
-from fastapi import FastAPI, UploadFile, File, HTTPException, Form, Query, WebSocket
+from dotenv import find_dotenv, load_dotenv
+from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from pymongo import MongoClient
 from pydantic import BaseModel
-from bson import ObjectId
+from pymongo import MongoClient
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -32,19 +34,18 @@ load_dotenv(env_path)
 # Add parent directory to path to import speecher module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from speecher import aws as aws_service
-
 # Import cloud wrappers for missing functions
 from backend import cloud_wrappers
-
-# Import streaming module for real-time transcription
-from backend.streaming import handle_websocket_streaming
 
 # Import API keys manager
 from backend.api_keys import APIKeysManager
 
 # Import API v2 routers
-from backend.api_v2 import auth_router, users_router, projects_router
+from backend.api_v2 import auth_router, projects_router, users_router
+
+# Import streaming module for real-time transcription
+from backend.streaming import handle_websocket_streaming
+from speecher import aws as aws_service
 
 # Configuration from environment variables
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")

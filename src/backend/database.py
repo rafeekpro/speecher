@@ -1,7 +1,7 @@
 """Database operations for projects and recordings"""
 
-from typing import Dict, List, Optional
 from datetime import datetime
+from typing import Dict, List, Optional
 from uuid import uuid4
 
 from src.backend.models import (

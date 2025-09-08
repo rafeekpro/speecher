@@ -1,16 +1,17 @@
 """Authentication and authorization module"""
 
+import hashlib
 import os
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
-import hashlib
-import jwt
-from passlib.context import CryptContext
-from fastapi import HTTPException, Security, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, APIKeyHeader
-from src.backend.models import UserDB, ApiKeyDB
+from typing import Any, Dict, Optional
 
+import jwt
+from fastapi import HTTPException, Security, status
+from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
+from passlib.context import CryptContext
+
+from src.backend.models import ApiKeyDB, UserDB
 
 # Configuration
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", secrets.token_urlsafe(32))

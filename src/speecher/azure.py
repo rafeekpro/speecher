@@ -7,21 +7,21 @@ Moduł zawierający funkcje do interakcji z usługami Azure:
 - Azure Speech Service do transkrypcji mowy na tekst
 """
 
-import os
-import uuid
-import time
 import logging
+import os
+import time
+import uuid
 from datetime import datetime, timedelta
 
+import requests
+from azure.cognitiveservices.speech import CancellationDetails, ResultReason, SpeechConfig, SpeechRecognizer
+from azure.cognitiveservices.speech.audio import AudioConfig
+from azure.core.exceptions import ResourceExistsError
 from azure.storage.blob import (
     BlobServiceClient,
-    generate_container_sas,
     ContainerSasPermissions,
+    generate_container_sas,
 )
-from azure.core.exceptions import ResourceExistsError
-from azure.cognitiveservices.speech import SpeechConfig, SpeechRecognizer, ResultReason, CancellationDetails
-from azure.cognitiveservices.speech.audio import AudioConfig
-import requests
 
 # Konfiguracja loggera
 logger = logging.getLogger(__name__)

@@ -7,14 +7,13 @@ Moduł zawierający funkcje do interakcji z usługami Google Cloud Platform:
 - Google Cloud Speech-to-Text do transkrypcji mowy na tekst
 """
 
-import os
-import uuid
-import time
 import logging
+import os
+import time
+import uuid
 from datetime import datetime
 
-from google.cloud import storage
-from google.cloud import speech
+from google.cloud import speech, storage
 from google.protobuf.json_format import MessageToDict
 
 # Konfiguracja loggera

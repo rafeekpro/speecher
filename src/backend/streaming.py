@@ -2,10 +2,11 @@
 WebSocket streaming module for real-time speech-to-text transcription.
 Supports real-time audio streaming from browser microphone.
 """
+
 import base64
 import io
-from typing import Dict, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
 

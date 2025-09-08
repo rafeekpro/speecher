@@ -6,13 +6,12 @@ Program do transkrypcji plików audio .wav z wykorzystaniem usług AWS.
 Wykorzystuje Amazon S3 do przechowywania plików oraz Amazon Transcribe do transkrypcji.
 """
 
-import uuid
-import logging
 import argparse
+import logging
+import uuid
 from pathlib import Path
 
-from . import aws
-from . import transcription
+from . import aws, transcription
 
 # Konfiguracja logowania
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")

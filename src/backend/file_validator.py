@@ -1,8 +1,8 @@
 """File validation utilities for audio file processing"""
 
 import os
-from typing import Tuple, Optional
 from enum import Enum
+from typing import Optional, Tuple
 
 
 class AudioFormat(Enum):

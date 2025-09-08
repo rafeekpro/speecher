@@ -7,14 +7,14 @@ Moduł zawierający funkcje do interakcji z usługami AWS:
 - Amazon Transcribe do transkrypcji mowy na tekst
 """
 
-import os
-import uuid
-import time
 import logging
+import os
+import time
+import uuid
 
 import boto3
-from botocore.exceptions import ClientError
 import requests
+from botocore.exceptions import ClientError
 
 # Konfiguracja loggera
 logger = logging.getLogger(__name__)

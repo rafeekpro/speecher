@@ -1,8 +1,9 @@
 """
 Cloud service wrappers for backend API
 """
+
 import logging
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
