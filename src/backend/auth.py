@@ -6,9 +6,8 @@ from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import hashlib
 import jwt
-from jwt import exceptions as jwt_exceptions
 from passlib.context import CryptContext
-from fastapi import HTTPException, Security, Depends, status
+from fastapi import HTTPException, Security, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials, APIKeyHeader
 from src.backend.models import UserDB, ApiKeyDB
 
@@ -47,19 +46,19 @@ def validate_password_strength(password: str) -> tuple[bool, str]:
     """Validate password meets complexity requirements"""
     if len(password) < 8:
         return False, "Password must be at least 8 characters long"
-    
+
     if not any(c.isupper() for c in password):
         return False, "Password must contain at least one uppercase letter"
-    
+
     if not any(c.islower() for c in password):
         return False, "Password must contain at least one lowercase letter"
-    
+
     if not any(c.isdigit() for c in password):
         return False, "Password must contain at least one number"
-    
+
     if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
         return False, "Password must contain at least one special character"
-    
+
     return True, "Password is strong"
 
 
@@ -70,7 +69,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
         expire = datetime.utcnow() + expires_delta
     else:
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     to_encode.update({"exp": expire, "type": "access"})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -81,19 +80,16 @@ def create_refresh_token(data: dict) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "type": "refresh"})
-    
+
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    
+
     # Store refresh token
     user_email = data.get("sub")
     if user_email:
         if user_email not in refresh_tokens_db:
             refresh_tokens_db[user_email] = {}
-        refresh_tokens_db[user_email][encoded_jwt] = {
-            "created_at": datetime.utcnow(),
-            "expires_at": expire
-        }
-    
+        refresh_tokens_db[user_email][encoded_jwt] = {"created_at": datetime.utcnow(), "expires_at": expire}
+
     return encoded_jwt
 
 
@@ -103,15 +99,9 @@ def decode_token(token: str) -> dict:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
     except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token has expired"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token has expired")
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
 
 def get_user_by_email(email: str) -> Optional[UserDB]:
@@ -131,26 +121,16 @@ def create_user(email: str, password: str, full_name: str) -> UserDB:
     """Create a new user"""
     # Check if user exists
     if get_user_by_email(email):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="User with this email already exists"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User with this email already exists")
+
     # Validate password
     is_valid, message = validate_password_strength(password)
     if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=message
-        )
-    
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=message)
+
     # Create user
-    user = UserDB(
-        email=email,
-        password_hash=hash_password(password),
-        full_name=full_name
-    )
-    
+    user = UserDB(email=email, password_hash=hash_password(password), full_name=full_name)
+
     users_db[email] = user
     return user
 
@@ -160,10 +140,10 @@ def authenticate_user(email: str, password: str) -> Optional[UserDB]:
     user = get_user_by_email(email)
     if not user:
         return None
-    
+
     if not verify_password(password, user.password_hash):
         return None
-    
+
     return user
 
 
@@ -171,42 +151,33 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Security(bearer
     """Get current user from JWT token"""
     token = credentials.credentials
     payload = decode_token(token)
-    
+
     if payload.get("type") != "access":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token type"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token type")
+
     email = payload.get("sub")
     if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token payload"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token payload")
+
     user = get_user_by_email(email)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found"
-        )
-    
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+
     return user
 
 
 def get_current_user_optional(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
-    api_key: Optional[str] = Security(api_key_header)
+    api_key: Optional[str] = Security(api_key_header),
 ) -> Optional[UserDB]:
     """Get current user from JWT token or API key (optional).
-    
+
     This function is for endpoints that support optional authentication.
     For required authentication, use get_current_user directly.
-    
+
     Returns:
         UserDB if authenticated, None if no valid credentials provided.
-    
+
     Note:
         This intentionally returns None instead of raising exceptions
         to support endpoints with optional authentication.
@@ -218,34 +189,31 @@ def get_current_user_optional(
         except HTTPException:
             # Invalid JWT, but might have valid API key
             pass
-    
+
     # Try API key as fallback
     if api_key:
         user = get_user_by_api_key(api_key)
         if user:
             return user
-    
+
     # No valid authentication provided - this is acceptable for optional auth
     return None
 
 
 def require_auth(
     credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
-    api_key: Optional[str] = Security(api_key_header)
+    api_key: Optional[str] = Security(api_key_header),
 ) -> UserDB:
     """Require authentication via JWT or API key.
-    
+
     This function requires valid authentication and raises HTTPException if not provided.
-    
+
     Raises:
         HTTPException: 401 if no valid authentication is provided.
     """
     user = get_current_user_optional(credentials, api_key)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
     return user
 
 
@@ -254,17 +222,12 @@ def create_api_key(user_id: str, name: str, expires_at: Optional[datetime] = Non
     # Generate API key
     key = secrets.token_urlsafe(32)
     key_hash = hashlib.sha256(key.encode()).hexdigest()
-    
+
     # Create API key record
-    api_key_db = ApiKeyDB(
-        user_id=user_id,
-        name=name,
-        key_hash=key_hash,
-        expires_at=expires_at
-    )
-    
+    api_key_db = ApiKeyDB(user_id=user_id, name=name, key_hash=key_hash, expires_at=expires_at)
+
     api_keys_db[key] = api_key_db
-    
+
     return key, api_key_db
 
 
@@ -273,14 +236,14 @@ def get_user_by_api_key(api_key: str) -> Optional[UserDB]:
     api_key_db = api_keys_db.get(api_key)
     if not api_key_db:
         return None
-    
+
     # Check expiration
     if api_key_db.expires_at and api_key_db.expires_at < datetime.utcnow():
         return None
-    
+
     # Update last used
     api_key_db.last_used = datetime.utcnow()
-    
+
     return get_user_by_id(api_key_db.user_id)
 
 
@@ -305,20 +268,17 @@ def check_rate_limit(identifier: str, max_attempts: int = 5, window_minutes: int
     """Check if rate limit has been exceeded"""
     now = datetime.utcnow()
     window_start = now - timedelta(minutes=window_minutes)
-    
+
     if identifier not in rate_limit_db:
         rate_limit_db[identifier] = []
-    
+
     # Clean old attempts
-    rate_limit_db[identifier] = [
-        attempt for attempt in rate_limit_db[identifier]
-        if attempt > window_start
-    ]
-    
+    rate_limit_db[identifier] = [attempt for attempt in rate_limit_db[identifier] if attempt > window_start]
+
     # Check limit
     if len(rate_limit_db[identifier]) >= max_attempts:
         return False
-    
+
     # Record attempt
     rate_limit_db[identifier].append(now)
     return True
@@ -329,20 +289,20 @@ def delete_user(user_id: str) -> bool:
     user = get_user_by_id(user_id)
     if not user:
         return False
-    
+
     # Delete user
     del users_db[user.email]
-    
+
     # Delete refresh tokens
     revoke_all_refresh_tokens(user.email)
-    
+
     # Delete API keys
     keys_to_delete = []
     for key, api_key_db in api_keys_db.items():
         if api_key_db.user_id == user_id:
             keys_to_delete.append(key)
-    
+
     for key in keys_to_delete:
         del api_keys_db[key]
-    
+
     return True

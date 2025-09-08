@@ -16,7 +16,7 @@ const AudioVisualizer = ({ stream, isRecording }) => {
     }
 
     return cleanup;
-  }, [stream, isRecording]);
+  }, [stream, isRecording, setupAudioAnalysis]);
 
   const setupAudioAnalysis = () => {
     try {

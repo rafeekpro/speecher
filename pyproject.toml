@@ -100,3 +100,9 @@ addopts = "-v --cov=src --cov-report=term-missing"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "mongomock>=4.1.2",
+    "setuptools>=80.9.0",
+]
