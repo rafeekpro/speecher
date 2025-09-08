@@ -1,45 +1,70 @@
 ## 📋 Description
+Closes #[issue_number]
+
 <!-- Provide a brief description of the changes in this PR -->
 
-## 🎯 Type of Change
-<!-- Mark the relevant option with an "x" -->
+## 🧪 Type of Change
 - [ ] 🐛 Bug fix (non-breaking change which fixes an issue)
 - [ ] ✨ New feature (non-breaking change which adds functionality)
 - [ ] 💥 Breaking change (fix or feature that would cause existing functionality to not work as expected)
 - [ ] 📝 Documentation update
-- [ ] 🎨 Code style update (formatting, renaming)
 - [ ] ♻️ Refactoring (no functional changes)
-- [ ] 🧪 Test update
-- [ ] 🔧 Configuration change
+- [ ] 🧪 Tests (adding or updating tests)
+
+## 📸 Screenshots (if applicable)
+<!-- Add screenshots or recordings to help reviewers understand the changes -->
 
 ## ✅ Checklist
-<!-- Mark completed items with an "x" -->
+
+### General
 - [ ] My code follows the style guidelines of this project
-- [ ] I have performed a self-review of my code
+- [ ] I have performed a self-review of my own code
 - [ ] I have commented my code, particularly in hard-to-understand areas
 - [ ] I have made corresponding changes to the documentation
 - [ ] My changes generate no new warnings
-- [ ] I have added tests that prove my fix is effective or that my feature works
-- [ ] New and existing unit tests pass locally with my changes
 - [ ] Any dependent changes have been merged and published
 
-## 🧪 Testing
-<!-- Describe the tests you ran to verify your changes -->
-- [ ] Unit tests pass
-- [ ] Integration tests pass
-- [ ] Manual testing completed
+### Testing
+- [ ] Tests written BEFORE implementation (TDD approach)
+- [ ] All new and existing unit tests pass
+- [ ] Test coverage maintained or improved
+- [ ] Integration tests updated (if applicable)
 
-### Test Configuration:
-- **Provider tested**: AWS / Azure / GCP
-- **Language tested**: 
-- **File size tested**: 
+### Code Quality
+- [ ] No linting errors (`npm run lint`)
+- [ ] No TypeScript errors (`npm run typecheck`)
+- [ ] Build succeeds (`npm run build`)
+- [ ] No console errors or warnings
 
-## 📸 Screenshots (if applicable)
-<!-- Add screenshots to help explain your changes -->
+### UI/UX (if applicable)
+- [ ] Responsive design verified (mobile, tablet, desktop)
+- [ ] Accessibility requirements met (ARIA labels, keyboard navigation)
+- [ ] Cross-browser testing completed
+- [ ] Loading states implemented
+- [ ] Error states handled gracefully
 
-## 📚 Related Issues
-<!-- Link any related issues here -->
-Closes #
+## 📝 Testing Instructions
+<!-- Provide step-by-step instructions for testing your changes -->
 
-## 💬 Additional Notes
-<!-- Add any additional notes or context about the PR here -->
+1. 
+2. 
+3. 
+
+## 🔗 Related Issues
+<!-- Link any related issues or PRs -->
+
+- Closes #
+- Related to #
+
+## 📊 Performance Impact
+<!-- Describe any performance implications of your changes -->
+
+- [ ] No significant performance impact
+- [ ] Performance improved
+- [ ] Performance metrics documented
+
+## 🚨 Breaking Changes
+<!-- List any breaking changes and migration instructions -->
+
+## 📖 Additional Notes
+<!-- Any additional information that reviewers should know -->

@@ -151,7 +151,8 @@ class TestTranscribeEndpoint:
         )
         
         assert response.status_code == 400
-        assert "Invalid file type" in response.json()["detail"]
+        detail = response.json()["detail"]
+        assert "Invalid format" in detail or "Invalid file type" in detail
     
     @pytest.mark.skip(reason="Azure test needs environment setup - skipping for CI")
     @patch('backend.main.collection')

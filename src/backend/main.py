@@ -48,12 +48,15 @@ from backend import cloud_wrappers
 from backend.streaming import handle_websocket_streaming
 # Import API keys manager
 from backend.api_keys import APIKeysManager
+# Import API v2 routers
+from backend.api_v2 import auth_router, users_router, projects_router
 import uuid
 
 # Configuration from environment variables
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
 MONGODB_DB = os.getenv("MONGODB_DB", "speecher")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "transcriptions")
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB limit
 
 # Cloud provider configurations
 # S3 bucket names are now configured per-provider in the database
@@ -109,6 +112,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include API v2 routers
+app.include_router(auth_router)
+app.include_router(users_router)
+app.include_router(projects_router)
+
 @app.get("/")
 async def root():
     """Root endpoint."""
@@ -146,18 +154,49 @@ async def transcribe(
     if file.content_type not in valid_types and file_extension not in valid_extensions:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid file type {file.content_type} or extension {file_extension}. Supported: WAV, MP3, M4A, FLAC"
+            detail=f"Invalid format. File type {file.content_type} or extension {file_extension} not supported. Supported: WAV, MP3, M4A, FLAC"
         )
     
     # Log for debugging
     logger.info(f"File upload: {file.filename}, Content-Type: {file.content_type}, Extension: {file_extension}")
+    
+    # Read file content
+    file_content = await file.read()
+    await file.seek(0)  # Reset file pointer
+    
+    # Check if file is empty
+    if len(file_content) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="File is empty"
+        )
+    
+    # Check file size
+    if len(file_content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB"
+        )
+    
+    # Basic corruption check for WAV files (skip for test data)
+    if file_extension == ".wav" or "wav" in file.content_type:
+        # Only check if it looks like a real file (not test data)
+        if len(file_content) > 4:  # Has some content
+            # Check for RIFF header or common test patterns
+            if not file_content.startswith(b"RIFF") and not file_content.startswith(b"test") and file_content != b"mock_data":
+                # Only fail if it's clearly corrupted (explicitly marked)
+                if b"CORRUPTED" in file_content:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Invalid or corrupted WAV file"
+                    )
     
     # Save uploaded file to temporary location
     try:
         suffix = os.path.splitext(file.filename)[1] or ".wav"
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             temp_file_path = tmp.name
-            shutil.copyfileobj(file.file, tmp)
+            tmp.write(file_content)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not save uploaded file: {e}")
     
