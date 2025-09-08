@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements files
-COPY requirements/base.txt requirements/
+COPY requirements/ requirements/
 COPY pyproject.toml ./
 
 # Install Python dependencies
