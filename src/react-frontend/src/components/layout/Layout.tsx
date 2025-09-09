@@ -82,6 +82,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           <div className="flex items-center justify-between px-4 py-3">
             {/* Mobile Menu Button */}
             <button
+              type="button"
               onClick={handleToggleSidebar}
               className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
               aria-label="Open menu"
