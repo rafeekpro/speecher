@@ -1,5 +1,5 @@
-# Development Dockerfile for React with hot-reload
-FROM node:18-alpine
+# Development Dockerfile for React with hot-reload - using stable LTS version
+FROM node:lts-alpine
 
 # Install additional tools for development
 RUN apk add --no-cache \

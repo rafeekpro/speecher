@@ -1,6 +1,8 @@
-# Build stage - using stable LTS version with fallback support
-# Priority: 1. Docker Hub LTS, 2. Standard without alpine for stability
-FROM node:lts-alpine AS build
+# Fallback Dockerfile for Docker Hub availability issues  
+# Uses non-alpine images for maximum stability during outages
+
+# Build stage - Using standard Node.js (non-alpine) for maximum stability
+FROM node:18 AS build
 
 WORKDIR /app
 
@@ -17,8 +19,8 @@ COPY src/react-frontend/ ./
 # Build the React app
 RUN npm run build
 
-# Production stage - using stable nginx to serve static files
-FROM nginx:stable-alpine
+# Production stage - using standard nginx (not alpine) for stability
+FROM nginx:stable
 
 # Copy built React app from build stage
 COPY --from=build /app/build /usr/share/nginx/html
