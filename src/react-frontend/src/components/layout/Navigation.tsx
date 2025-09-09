@@ -168,7 +168,7 @@ const Navigation: React.FC<NavigationProps> = ({ items, isCollapsed }) => {
               transition-all duration-200 hover:bg-gray-100
               ${isCollapsed ? 'justify-center' : 'justify-start'}
               ${isActive 
-                ? 'bg-primary-100 text-primary-700 bg-blue-100 text-blue-700' 
+                ? 'bg-blue-100 text-blue-700' 
                 : 'text-gray-700 hover:text-gray-900'
               }
             `}

@@ -10,6 +10,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  // Helper function to get main content margin class
+  const getMainMarginClass = () => {
+    if (isMobile) return '';
+    return isSidebarCollapsed ? 'md:ml-16' : 'md:ml-64';
+  };
+
   // Check if on mobile
   useEffect(() => {
     const checkMobile = () => {
@@ -115,7 +121,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           className={`
             flex-1 overflow-auto p-6
             transition-all duration-300
-            ${!isMobile ? (isSidebarCollapsed ? 'md:ml-16' : 'md:ml-64') : ''}
+            ${getMainMarginClass()}
           `}
         >
           {children}
