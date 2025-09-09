@@ -17,9 +17,9 @@ COPY src/react-frontend/package*.json ./
 # Using --legacy-peer-deps to handle TypeScript version conflicts with react-scripts
 RUN npm ci --legacy-peer-deps
 
-# Create non-root user
-RUN addgroup -g 1000 -S appuser && \
-    adduser -u 1000 -S appuser -G appuser && \
+# Create non-root user (handle existing group gracefully)
+RUN addgroup -g 1000 -S appuser 2>/dev/null || addgroup -S appuser && \
+    adduser -u 1000 -S appuser -G appuser 2>/dev/null || adduser -S appuser -G appuser && \
     chown -R appuser:appuser /app
 
 USER appuser

@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   # PostgreSQL database for production
   postgres:
@@ -117,7 +115,6 @@ services:
     networks:
       - speecher-network
     deploy:
-      replicas: ${BACKEND_REPLICAS:-2}
       resources:
         limits:
           cpus: '2'

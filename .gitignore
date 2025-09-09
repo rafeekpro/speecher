@@ -4,6 +4,8 @@
 .env.*.local
 node_modules/
 .claude/
+.claude-code/
+
 .claude
 CLAUDE.md
 

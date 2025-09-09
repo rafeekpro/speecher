@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   # PostgreSQL database for development
   postgres:
@@ -115,6 +113,7 @@ services:
     volumes:
       # Mount source code for hot-reload
       - ./src/backend:/app/src/backend:cached
+      - ./src/speecher:/app/src/speecher:cached
       - ./tests:/app/tests:cached
       # Mount pyproject.toml for dependency changes
       - ./pyproject.toml:/app/pyproject.toml:ro
@@ -227,7 +226,8 @@ services:
       PYTHONUNBUFFERED: 1
       PYTEST_ADDOPTS: "-vv --tb=short --color=yes"
     volumes:
-      - ./src:/app/src:cached
+      - ./src/backend:/app/src/backend:cached
+      - ./src/speecher:/app/src/speecher:cached
       - ./tests:/app/tests:cached
       - ./test_results:/app/test_results
       - ./pyproject.toml:/app/pyproject.toml:ro
