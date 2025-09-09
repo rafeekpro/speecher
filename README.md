@@ -248,6 +248,35 @@ pytest tests/unit
 pytest tests/integration
 ```
 
+## 🔄 Development Testing Process
+
+**CRITICAL**: Before committing any changes, you MUST run both commands locally:
+
+```bash
+# 1. Run all tests
+npm test
+
+# 2. Run production build
+npm run build
+```
+
+### Why This Matters
+
+- **CI uses production build settings** which are stricter than development mode
+- **Local tests passing ≠ CI tests passing** without production build verification  
+- **PR should be a formality** if both commands pass locally
+- **Prevents CI failures** that waste time and block the development process
+
+### The Process
+
+1. **Make your changes** in development mode
+2. **Run `npm test`** - ensures functionality works
+3. **Run `npm run build`** - ensures code compiles with production settings
+4. **Both must pass** before committing
+5. **Commit and push** - CI should now pass consistently
+
+This process ensures **local-CI parity** and prevents the common issue where development tests pass but CI fails due to stricter production build requirements.
+
 ## 📈 Performance
 
 | Provider | Processing Time | Accuracy | Cost/min |
