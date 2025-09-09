@@ -1,13 +1,14 @@
 # Build stage
-FROM node:18-alpine as build
+FROM node:18-alpine AS build
 
 WORKDIR /app
 
 # Copy package files
 COPY src/react-frontend/package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install all dependencies (including devDependencies for build)
+# Using --legacy-peer-deps to handle TypeScript version conflicts with react-scripts
+RUN npm ci --legacy-peer-deps
 
 # Copy source code
 COPY src/react-frontend/ ./
