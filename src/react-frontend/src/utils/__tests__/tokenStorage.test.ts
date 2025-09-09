@@ -80,7 +80,7 @@ describe('tokenStorage', () => {
       expect(localStorage.getItem('refreshToken')).toBeNull();
     });
 
-    it('should not throw error when tokens dont exist', () => {
+    it('should not throw error when tokens don\'t exist', () => {
       expect(() => tokenStorage.clearTokens()).not.toThrow();
     });
   });
