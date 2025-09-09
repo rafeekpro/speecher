@@ -46,7 +46,7 @@ fi
 echo ""
 echo "Speecher is running!"
 echo "  - Backend API: http://localhost:8000"
-echo "  - Frontend: http://localhost:8501"
+echo "  - Frontend: http://localhost:3000"
 echo "  - MongoDB: localhost:27017"
 echo ""
 echo "To view logs: docker-compose logs -f"
