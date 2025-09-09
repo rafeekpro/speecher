@@ -40,8 +40,8 @@ from backend import cloud_wrappers
 # Import API keys manager
 from backend.api_keys import APIKeysManager
 
-# Import API v2 routers
-from backend.api_v2 import auth_router, projects_router, users_router
+# Import API v2 router
+from backend.api.v2 import api_v2_router
 
 # Import streaming module for real-time transcription
 from backend.streaming import handle_websocket_streaming
@@ -112,9 +112,7 @@ app.add_middleware(
 )
 
 # Include API v2 routers
-app.include_router(auth_router)
-app.include_router(users_router)
-app.include_router(projects_router)
+app.include_router(api_v2_router)
 
 
 @app.get("/")

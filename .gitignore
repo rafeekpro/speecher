@@ -3,6 +3,9 @@
 .env.local
 .env.*.local
 node_modules/
+.claude/
+.claude
+CLAUDE.md
 
 # Credentials
 gcp-credentials.json
