@@ -1,5 +1,10 @@
-import React, { useState } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
+import React, { useState } from "react";
+import { useAuth } from "../../contexts/AuthContext";
+import {
+  validateEmail,
+  validatePassword,
+  MIN_PASSWORD_LENGTH,
+} from "../../utils/validation";
 
 interface RegisterFormProps {
   onSuccess?: () => void;
@@ -23,87 +28,87 @@ interface FormErrors {
 export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
   const { register } = useAuth();
   const [formData, setFormData] = useState<FormData>({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: ''
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
   });
   const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
 
   const validateForm = (): boolean => {
     const newErrors: FormErrors = {};
-    
+
     if (!formData.name) {
-      newErrors.name = 'Name is required';
+      newErrors.name = "Name is required";
     }
-    
+
     if (!formData.email) {
-      newErrors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = 'Invalid email format';
+      newErrors.email = "Email is required";
+    } else if (!validateEmail(formData.email)) {
+      newErrors.email = "Invalid email format";
     }
-    
+
     if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
+      newErrors.password = "Password is required";
+    } else if (!validatePassword(formData.password)) {
+      newErrors.password = `Password must be at least ${MIN_PASSWORD_LENGTH} characters`;
     }
-    
+
     if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Password confirmation is required';
+      newErrors.confirmPassword = "Password confirmation is required";
     } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
+      newErrors.confirmPassword = "Passwords do not match";
     }
-    
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
     // Clear error for this field when user starts typing
     if (errors[name as keyof FormErrors]) {
-      setErrors(prev => ({
+      setErrors((prev) => ({
         ...prev,
-        [name]: undefined
+        [name]: undefined,
       }));
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
-    
+
     setLoading(true);
     setErrors({});
-    
+
     try {
       await register({
         name: formData.name,
         email: formData.email,
-        password: formData.password
+        password: formData.password,
       });
       // Clear form on success
       setFormData({
-        name: '',
-        email: '',
-        password: '',
-        confirmPassword: ''
+        name: "",
+        email: "",
+        password: "",
+        confirmPassword: "",
       });
       if (onSuccess) {
         onSuccess();
       }
     } catch (error) {
       setErrors({
-        general: error instanceof Error ? error.message : 'Registration failed'
+        general: error instanceof Error ? error.message : "Registration failed",
       });
     } finally {
       setLoading(false);
@@ -112,8 +117,11 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
 
   return (
     <form onSubmit={handleSubmit} aria-label="Registration form" role="form">
-      <div style={{ marginBottom: '1rem' }}>
-        <label htmlFor="name" style={{ display: 'block', marginBottom: '0.5rem' }}>
+      <div style={{ marginBottom: "1rem" }}>
+        <label
+          htmlFor="name"
+          style={{ display: "block", marginBottom: "0.5rem" }}
+        >
           Name
         </label>
         <input
@@ -125,19 +133,24 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
           required
           disabled={loading}
           style={{
-            width: '100%',
-            padding: '0.5rem',
-            border: errors.name ? '1px solid red' : '1px solid #ccc',
-            borderRadius: '4px'
+            width: "100%",
+            padding: "0.5rem",
+            border: errors.name ? "1px solid red" : "1px solid #ccc",
+            borderRadius: "4px",
           }}
         />
         {errors.name && (
-          <span style={{ color: 'red', fontSize: '0.875rem' }}>{errors.name}</span>
+          <span style={{ color: "red", fontSize: "0.875rem" }}>
+            {errors.name}
+          </span>
         )}
       </div>
 
-      <div style={{ marginBottom: '1rem' }}>
-        <label htmlFor="email" style={{ display: 'block', marginBottom: '0.5rem' }}>
+      <div style={{ marginBottom: "1rem" }}>
+        <label
+          htmlFor="email"
+          style={{ display: "block", marginBottom: "0.5rem" }}
+        >
           Email
         </label>
         <input
@@ -149,19 +162,24 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
           required
           disabled={loading}
           style={{
-            width: '100%',
-            padding: '0.5rem',
-            border: errors.email ? '1px solid red' : '1px solid #ccc',
-            borderRadius: '4px'
+            width: "100%",
+            padding: "0.5rem",
+            border: errors.email ? "1px solid red" : "1px solid #ccc",
+            borderRadius: "4px",
           }}
         />
         {errors.email && (
-          <span style={{ color: 'red', fontSize: '0.875rem' }}>{errors.email}</span>
+          <span style={{ color: "red", fontSize: "0.875rem" }}>
+            {errors.email}
+          </span>
         )}
       </div>
 
-      <div style={{ marginBottom: '1rem' }}>
-        <label htmlFor="password" style={{ display: 'block', marginBottom: '0.5rem' }}>
+      <div style={{ marginBottom: "1rem" }}>
+        <label
+          htmlFor="password"
+          style={{ display: "block", marginBottom: "0.5rem" }}
+        >
           Password
         </label>
         <input
@@ -173,19 +191,24 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
           required
           disabled={loading}
           style={{
-            width: '100%',
-            padding: '0.5rem',
-            border: errors.password ? '1px solid red' : '1px solid #ccc',
-            borderRadius: '4px'
+            width: "100%",
+            padding: "0.5rem",
+            border: errors.password ? "1px solid red" : "1px solid #ccc",
+            borderRadius: "4px",
           }}
         />
         {errors.password && (
-          <span style={{ color: 'red', fontSize: '0.875rem' }}>{errors.password}</span>
+          <span style={{ color: "red", fontSize: "0.875rem" }}>
+            {errors.password}
+          </span>
         )}
       </div>
 
-      <div style={{ marginBottom: '1rem' }}>
-        <label htmlFor="confirmPassword" style={{ display: 'block', marginBottom: '0.5rem' }}>
+      <div style={{ marginBottom: "1rem" }}>
+        <label
+          htmlFor="confirmPassword"
+          style={{ display: "block", marginBottom: "0.5rem" }}
+        >
           Confirm Password
         </label>
         <input
@@ -197,37 +220,42 @@ export const RegisterForm: React.FC<RegisterFormProps> = ({ onSuccess }) => {
           required
           disabled={loading}
           style={{
-            width: '100%',
-            padding: '0.5rem',
-            border: errors.confirmPassword ? '1px solid red' : '1px solid #ccc',
-            borderRadius: '4px'
+            width: "100%",
+            padding: "0.5rem",
+            border: errors.confirmPassword ? "1px solid red" : "1px solid #ccc",
+            borderRadius: "4px",
           }}
         />
         {errors.confirmPassword && (
-          <span style={{ color: 'red', fontSize: '0.875rem' }}>{errors.confirmPassword}</span>
+          <span style={{ color: "red", fontSize: "0.875rem" }}>
+            {errors.confirmPassword}
+          </span>
         )}
       </div>
 
       {errors.general && (
-        <div style={{ color: 'red', marginBottom: '1rem' }}>{errors.general}</div>
+        <div style={{ color: "red", marginBottom: "1rem" }}>
+          {errors.general}
+        </div>
       )}
 
       <button
         type="submit"
         disabled={loading}
         style={{
-          width: '100%',
-          padding: '0.75rem',
-          backgroundColor: loading ? '#ccc' : '#28a745',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          cursor: loading ? 'not-allowed' : 'pointer',
-          fontSize: '1rem'
+          width: "100%",
+          padding: "0.75rem",
+          backgroundColor: loading ? "#ccc" : "#28a745",
+          color: "white",
+          border: "none",
+          borderRadius: "4px",
+          cursor: loading ? "not-allowed" : "pointer",
+          fontSize: "1rem",
         }}
       >
-        {loading ? 'Registering...' : 'Register'}
+        {loading ? "Registering..." : "Register"}
       </button>
     </form>
   );
 };
+
