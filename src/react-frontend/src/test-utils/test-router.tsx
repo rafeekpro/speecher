@@ -5,7 +5,7 @@ export const MemoryRouter: React.FC<{ children: React.ReactNode; initialEntries?
   return <>{children}</>;
 };
 
-export const Link: React.FC<{ to: string; children: React.ReactNode; className?: string; 'aria-current'?: string; 'aria-label'?: string; title?: string }> = ({ 
+export const Link: React.FC<{ to: string; children: React.ReactNode; className?: string; 'aria-current'?: boolean | "date" | "time" | "page" | "true" | "false" | "step" | "location"; 'aria-label'?: string; title?: string }> = ({ 
   to, 
   children, 
   ...props 
