@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import './Settings.css';
 import {
   Box,
   Typography,
