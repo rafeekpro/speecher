@@ -1,9 +1,11 @@
 """Tests for project management API endpoints"""
 
-import pytest
 import uuid
+from typing import Dict
+from typing import Tuple
+
+import pytest
 from fastapi.testclient import TestClient
-from typing import Dict, Tuple
 
 
 class TestProjectManagementAPI:

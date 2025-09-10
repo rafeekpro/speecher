@@ -1,13 +1,16 @@
 """
 Integration tests for MongoDB and end-to-end API flows
 """
-import pytest
 import asyncio
 import os
-from datetime import datetime, timedelta
-from bson.objectid import ObjectId
-from unittest.mock import patch, Mock
 import sys
+from datetime import datetime
+from datetime import timedelta
+from unittest.mock import Mock
+from unittest.mock import patch
+
+import pytest
+from bson.objectid import ObjectId
 
 # Set testing environment
 os.environ["TESTING"] = "true"
@@ -15,7 +18,10 @@ os.environ["TESTING"] = "true"
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Mock cloud service modules before importing backend
-from tests.cloud_mocks import MockAWSService, MockAzureService, MockGCPService, MockTranscription
+from tests.cloud_mocks import MockAWSService
+from tests.cloud_mocks import MockAzureService
+from tests.cloud_mocks import MockGCPService
+from tests.cloud_mocks import MockTranscription
 
 sys.modules["speecher.aws"] = MockAWSService
 sys.modules["speecher.azure"] = MockAzureService
@@ -23,6 +29,7 @@ sys.modules["speecher.gcp"] = MockGCPService
 sys.modules["speecher.transcription"] = MockTranscription
 
 from fastapi.testclient import TestClient
+
 from backend.main import app
 
 client = TestClient(app)

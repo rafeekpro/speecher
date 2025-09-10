@@ -1,8 +1,10 @@
 """Tests for authentication API endpoints"""
 
-from fastapi.testclient import TestClient
-from datetime import datetime, timedelta
+from datetime import datetime
+from datetime import timedelta
+
 import jwt
+from fastapi.testclient import TestClient
 
 
 def get_error_message(response_json):

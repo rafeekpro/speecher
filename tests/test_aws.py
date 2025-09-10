@@ -3,23 +3,23 @@
 Unit tests for the AWS module which handles interactions with AWS services.
 """
 
+import os
 import unittest
 import uuid
-import os
-from unittest.mock import patch, MagicMock
-from botocore.exceptions import ClientError
+from unittest.mock import MagicMock
+from unittest.mock import patch
 
-# Import test utilities
-from tests.test_utils import (
-    setup_test_data_dir,
-    create_mock_s3_client,
-    create_mock_transcribe_client,
-    create_sample_wav_file,
-    get_sample_transcription_data,
-)
+from botocore.exceptions import ClientError
 
 # Import the module to test
 from src.speecher import aws
+
+# Import test utilities
+from tests.test_utils import create_mock_s3_client
+from tests.test_utils import create_mock_transcribe_client
+from tests.test_utils import create_sample_wav_file
+from tests.test_utils import get_sample_transcription_data
+from tests.test_utils import setup_test_data_dir
 
 
 class TestAWSModule(unittest.TestCase):

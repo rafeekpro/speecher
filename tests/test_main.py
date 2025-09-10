@@ -3,17 +3,21 @@
 Unit tests for the main module which handles the application workflow.
 """
 
-import unittest
 import os
 import tempfile
-from unittest.mock import patch, MagicMock, mock_open
+import unittest
 from pathlib import Path
-
-# Import test utilities
-from tests.test_utils import setup_test_data_dir, create_sample_wav_file, get_sample_transcription_data
+from unittest.mock import MagicMock
+from unittest.mock import mock_open
+from unittest.mock import patch
 
 # Import the module to test
 from src.speecher import main
+
+# Import test utilities
+from tests.test_utils import create_sample_wav_file
+from tests.test_utils import get_sample_transcription_data
+from tests.test_utils import setup_test_data_dir
 
 
 class TestMainModule(unittest.TestCase):

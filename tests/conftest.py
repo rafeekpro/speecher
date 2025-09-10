@@ -1,13 +1,14 @@
 """
 Pytest configuration and fixtures for API tests
 """
-import pytest
-import tempfile
 import os
 import sys
+import tempfile
 from datetime import datetime
-from bson.objectid import ObjectId
+
 import mongomock
+import pytest
+from bson.objectid import ObjectId
 from fastapi.testclient import TestClient
 
 # Add src to path
@@ -218,11 +219,15 @@ def multiple_transcriptions():
 @pytest.fixture
 def client():
     """Create a test client for the FastAPI app"""
-    from backend.main import app
-
     # Clear any existing data in the in-memory databases
-    from backend.auth import users_db, api_keys_db, refresh_tokens_db, rate_limit_db
-    from backend.database import projects_db, recordings_db, tags_db
+    from backend.auth import api_keys_db
+    from backend.auth import rate_limit_db
+    from backend.auth import refresh_tokens_db
+    from backend.auth import users_db
+    from backend.database import projects_db
+    from backend.database import recordings_db
+    from backend.database import tags_db
+    from backend.main import app
 
     users_db.clear()
     api_keys_db.clear()

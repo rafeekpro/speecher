@@ -96,12 +96,19 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: 'npm start',
+    command: process.env.CI 
+      ? 'npm run build && npx serve -s build -l 3000'
+      : 'npm start',
     port: Number(PORT),
     reuseExistingServer: !process.env.CI,
-    timeout: 120000,
+    timeout: process.env.CI ? 180000 : 120000, // More time for build in CI
     stdout: 'pipe',
     stderr: 'pipe',
+    env: {
+      ...process.env,
+      BROWSER: 'none', // Prevent react-scripts from opening browser
+      HOST: '0.0.0.0', // Bind to all interfaces
+    },
   },
 
   // Visual testing specific configuration

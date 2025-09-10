@@ -1,9 +1,10 @@
 """Tests for user management API endpoints"""
 
-import pytest
 import uuid
-from fastapi.testclient import TestClient
 from typing import Dict
+
+import pytest
+from fastapi.testclient import TestClient
 
 
 def get_error_message(response_json):

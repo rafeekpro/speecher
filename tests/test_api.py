@@ -1,20 +1,25 @@
 """
 Comprehensive test suite for Speecher API
 """
-import pytest
 import io
-from unittest.mock import Mock, patch
+import os
+import sys
 from datetime import datetime
+from unittest.mock import Mock
+from unittest.mock import patch
+
+import pytest
 from bson.objectid import ObjectId
 from fastapi.testclient import TestClient
-import sys
-import os
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 # Mock cloud service modules before importing backend
-from tests.cloud_mocks import MockAWSService, MockAzureService, MockGCPService, MockTranscription
+from tests.cloud_mocks import MockAWSService
+from tests.cloud_mocks import MockAzureService
+from tests.cloud_mocks import MockGCPService
+from tests.cloud_mocks import MockTranscription
 
 sys.modules["speecher.aws"] = MockAWSService
 sys.modules["speecher.azure"] = MockAzureService
