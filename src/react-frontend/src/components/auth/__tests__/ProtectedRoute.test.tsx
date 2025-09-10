@@ -11,7 +11,9 @@ const mockedAuthService = authService as jest.Mocked<typeof authService>;
 
 // Mock react-router-dom Navigate
 jest.mock('react-router-dom', () => ({
-  ...jest.requireActual('react-router-dom'),
+  MemoryRouter: ({ children }: any) => <div>{children}</div>,
+  Route: ({ children }: any) => <div>{children}</div>,
+  Routes: ({ children }: any) => <div>{children}</div>,
   Navigate: ({ to }: { to: string }) => <div>Redirected to {to}</div>
 }));
 
