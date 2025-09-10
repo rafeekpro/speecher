@@ -248,7 +248,7 @@ function AppContent() {
       formData.append('language', settings.language);
       formData.append('enable_diarization', String(settings.enableDiarization));
       formData.append('max_speakers', String(settings.maxSpeakers));
-      formData.append('include_timestamps', String(settings.includeTimestamps));
+      formData.append('include_timestamps', settings.includeTimestamps ? "1" : "0");
       
       const result = await transcribeAudio(formData);
       
