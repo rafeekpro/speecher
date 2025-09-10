@@ -63,6 +63,16 @@ htmlcov/
 .hypothesis/
 test_output*.txt
 test_results/
+coverage/
+playwright-report/
+**/test-results/
+**/playwright-report/
+**/.playwright-artifacts*/
+*.webm
+*.trace
+
+# Example/template files
+*.example.*
 
 # IDE
 .vscode/
