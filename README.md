@@ -20,7 +20,7 @@ Speecher is a professional audio transcription tool with automatic speaker recog
 
 ## 📁 Project Structure
 
-```
+```text
 speecher/
 ├── src/                    # Source code
 │   ├── backend/           # FastAPI REST API
@@ -40,6 +40,7 @@ speecher/
 ## 🚀 Quick Start
 
 ### Using Make (Recommended)
+
 ```bash
 # Install dependencies
 make install
@@ -55,6 +56,7 @@ make help
 ```
 
 ### Using Docker
+
 ```bash
 # Copy environment configuration
 cp config/.env.example .env
@@ -65,19 +67,22 @@ docker-compose up --build
 ```
 
 ### Access Points
-- **React Frontend**: http://localhost:3000
-- **API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
+
+- **React Frontend**: <http://localhost:3000>
+- **API**: <http://localhost:8000>
+- **API Documentation**: <http://localhost:8000/docs>
 - **MongoDB**: localhost:27017
 
 ## 💻 Local Installation (CLI)
 
 ### Requirements
+
 - Python 3.11+
 - Poetry or pip
 - Account with AWS/Azure/GCP (at least one)
 
 ### Installation
+
 ```bash
 # With Poetry
 poetry install
@@ -87,6 +92,7 @@ pip install -r requirements.txt
 ```
 
 ### CLI Usage
+
 ```bash
 # Basic transcription
 python -m speecher.cli --audio-file audio.wav --language pl-PL
@@ -103,7 +109,7 @@ python -m speecher.cli --audio-file audio.wav --enable-speaker-identification --
 
 ## 🏗️ Architecture
 
-```
+```text
 speecher/
 ├── src/
 │   ├── speecher/           # Core library
@@ -125,6 +131,7 @@ speecher/
 ## 🔧 Provider Configuration
 
 ### AWS Transcribe
+
 1. Create AWS account
 2. Generate access keys (IAM)
 3. Create S3 bucket
@@ -139,6 +146,7 @@ S3_BUCKET_NAME=your-bucket
 ```
 
 ### Azure Speech Services
+
 1. Create Azure account
 2. Create Storage Account
 3. Enable Cognitive Services - Speech
@@ -152,6 +160,7 @@ AZURE_SPEECH_REGION=westeurope
 ```
 
 ### Google Cloud Speech-to-Text
+
 1. Create GCP project
 2. Enable Speech-to-Text API
 3. Create Service Account
@@ -168,6 +177,7 @@ GOOGLE_APPLICATION_CREDENTIALS=./gcp-credentials.json
 ### Main Endpoints
 
 #### Transcription
+
 ```http
 POST /transcribe
 Content-Type: multipart/form-data
@@ -180,16 +190,19 @@ max_speakers: 4
 ```
 
 #### History
+
 ```http
 GET /history?search=file&provider=aws&limit=50
 ```
 
 #### Statistics
+
 ```http
 GET /stats
 ```
 
 ### Usage Example (Python)
+
 ```python
 import requests
 
@@ -212,6 +225,7 @@ print(result["transcript"])
 ## 🎨 Frontend Features
 
 ### Configuration Panel
+
 - Cloud provider selection (AWS/Azure/GCP)
 - Language selection (11 languages)
 - Diarization configuration (2-10 speakers)
@@ -219,6 +233,7 @@ print(result["transcript"])
 - Cost estimation before transcription
 
 ### Transcription History
+
 - Filterable table
 - Search by filename
 - Filter by date and provider
@@ -227,6 +242,7 @@ print(result["transcript"])
 - Record deletion
 
 ### Monitoring
+
 - API connection status
 - MongoDB database status
 - Usage statistics
@@ -248,6 +264,35 @@ pytest tests/unit
 pytest tests/integration
 ```
 
+## 🔄 Development Testing Process
+
+**CRITICAL**: Before committing any changes, you MUST run both commands locally:
+
+```bash
+# 1. Run all tests
+npm test
+
+# 2. Run production build
+npm run build
+```
+
+### Why This Matters
+
+- **CI uses production build settings** which are stricter than development mode
+- **Local tests passing ≠ CI tests passing** without production build verification  
+- **PR should be a formality** if both commands pass locally
+- **Prevents CI failures** that waste time and block the development process
+
+### The Process
+
+1. **Make your changes** in development mode
+2. **Run `npm test`** - ensures functionality works
+3. **Run `npm run build`** - ensures code compiles with production settings
+4. **Both must pass** before committing
+5. **Commit and push** - CI should now pass consistently
+
+This process ensures **local-CI parity** and prevents the common issue where development tests pass but CI fails due to stricter production build requirements.
+
 ## 📈 Performance
 
 | Provider | Processing Time | Accuracy | Cost/min |
@@ -263,6 +308,7 @@ pytest tests/integration
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for details.
 
 ### How to Contribute
+
 1. Fork the repository
 2. Create branch (`git checkout -b feature/AmazingFeature`)
 3. Commit changes (`git commit -m 'Add AmazingFeature'`)
@@ -285,7 +331,7 @@ This project is available under MIT license. See [LICENSE](LICENSE) for details.
 ## 📞 Contact
 
 Project Name: Speecher  
-Link: [https://github.com/yourusername/speecher](https://github.com/yourusername/speecher)
+Link: <https://github.com/yourusername/speecher>
 
 ---
 
