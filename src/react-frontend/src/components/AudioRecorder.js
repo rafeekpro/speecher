@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import './AudioRecorder.css';
 import {
   Box,
   Button,
