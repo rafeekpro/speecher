@@ -64,7 +64,7 @@ jobs:
           npx playwright install --with-deps ${{ matrix.browser }}
 
       - name: 📸 Download baseline screenshots
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: visual-snapshots-${{ matrix.browser }}
           path: ./src/react-frontend/tests/visual/__screenshots__
@@ -110,7 +110,7 @@ jobs:
 
       - name: 💾 Upload baseline snapshots
         if: success() || github.event.inputs.update_snapshots == 'true'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: visual-snapshots-${{ matrix.browser }}
           path: ./src/react-frontend/tests/visual/__screenshots__
@@ -118,7 +118,7 @@ jobs:
 
       - name: 📊 Upload test results
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: visual-test-results-${{ matrix.browser }}
           path: |
@@ -128,7 +128,7 @@ jobs:
 
       - name: 🔍 Upload visual diffs
         if: failure()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: visual-diffs-${{ matrix.browser }}
           path: |
@@ -242,7 +242,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 📸 Download updated snapshots
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: ./artifacts
 
