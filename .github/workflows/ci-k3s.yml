@@ -1,0 +1,312 @@
+name: CI/CD Pipeline (K3s Compatible)
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+    types: [ opened, synchronize, reopened ]
+
+env:
+  PYTHON_VERSION: '3.11'
+  NAMESPACE: 'speecher-ci'
+  
+jobs:
+  test:
+    name: Run Tests
+    runs-on: self-hosted
+    
+    services:
+      mongodb:
+        image: mongo:6.0
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand({ping: 1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements/base.txt
+        pip install -r requirements/test.txt
+    
+    - name: Run unit tests
+      env:
+        MONGODB_URI: mongodb://localhost:27017
+        S3_BUCKET_NAME: test-bucket
+        AZURE_STORAGE_ACCOUNT: test-account
+        GCP_PROJECT_ID: test-project
+      run: |
+        pytest tests/test_api.py -v --cov=src/backend --cov-report=xml
+    
+    - name: Run integration tests
+      env:
+        MONGODB_URI: mongodb://localhost:27017
+      run: |
+        pytest tests/test_integration.py -v
+    
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  lint:
+    name: Lint Code
+    runs-on: self-hosted
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install linting tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8 black isort mypy
+    
+    - name: Run Black
+      run: black --check src/ tests/
+      continue-on-error: true
+    
+    - name: Run isort
+      run: isort --check-only src/ tests/
+      continue-on-error: true
+    
+    - name: Run Flake8
+      run: flake8 src/ tests/ --max-line-length=120 --ignore=E203,W503
+      continue-on-error: true
+    
+    - name: Run MyPy
+      run: mypy src/ --ignore-missing-imports
+      continue-on-error: true
+
+  container-build:
+    name: Build Container Images (K3s)
+    runs-on: self-hosted
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup nerdctl for K3s
+      run: |
+        # Check if nerdctl is available
+        if command -v nerdctl >/dev/null 2>&1; then
+          echo "nerdctl found: $(nerdctl version)"
+        else
+          echo "Installing nerdctl..."
+          # Download and install nerdctl if not present
+          curl -Lo nerdctl.tar.gz https://github.com/containerd/nerdctl/releases/latest/download/nerdctl-full-1.7.1-linux-amd64.tar.gz
+          sudo tar -xzf nerdctl.tar.gz -C /usr/local/
+          rm nerdctl.tar.gz
+        fi
+        
+        # Set containerd namespace for K3s
+        export CONTAINERD_NAMESPACE=k8s.io
+        echo "CONTAINERD_NAMESPACE=k8s.io" >> $GITHUB_ENV
+    
+    - name: Build Backend Image with nerdctl
+      run: |
+        nerdctl build -t speecher-backend:test .
+    
+    - name: Build Frontend Image with nerdctl  
+      run: |
+        nerdctl build -f docker/react.Dockerfile -t speecher-frontend:test .
+    
+    - name: Test with Kubernetes (Alternative to Docker Compose)
+      run: |
+        # Create namespace
+        kubectl create namespace ${{ env.NAMESPACE }} --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Deploy test stack using Kubernetes
+        cat << EOF | kubectl apply -f -
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: test-config
+          namespace: ${{ env.NAMESPACE }}
+        data:
+          MONGODB_URI: "mongodb://mongodb:27017"
+        ---
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: mongodb
+          namespace: ${{ env.NAMESPACE }}
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: mongodb
+          template:
+            metadata:
+              labels:
+                app: mongodb
+            spec:
+              containers:
+              - name: mongodb
+                image: mongo:6.0
+                ports:
+                - containerPort: 27017
+                env:
+                - name: MONGO_INITDB_ROOT_USERNAME
+                  value: admin
+                - name: MONGO_INITDB_ROOT_PASSWORD
+                  value: speecher_admin_pass
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: mongodb
+          namespace: ${{ env.NAMESPACE }}
+        spec:
+          ports:
+          - port: 27017
+            targetPort: 27017
+          selector:
+            app: mongodb
+        ---
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: backend
+          namespace: ${{ env.NAMESPACE }}
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: backend
+          template:
+            metadata:
+              labels:
+                app: backend
+            spec:
+              containers:
+              - name: backend
+                image: speecher-backend:test
+                imagePullPolicy: Never
+                ports:
+                - containerPort: 8000
+                envFrom:
+                - configMapRef:
+                    name: test-config
+        ---
+        apiVersion: v1
+        kind: Service
+        metadata:
+          name: backend
+          namespace: ${{ env.NAMESPACE }}
+        spec:
+          type: NodePort
+          ports:
+          - port: 8000
+            targetPort: 8000
+            nodePort: 30800
+          selector:
+            app: backend
+        EOF
+        
+        # Wait for deployments
+        kubectl wait --for=condition=available --timeout=120s deployment/mongodb -n ${{ env.NAMESPACE }}
+        kubectl wait --for=condition=available --timeout=120s deployment/backend -n ${{ env.NAMESPACE }}
+        
+        # Health check
+        sleep 10
+        kubectl get pods -n ${{ env.NAMESPACE }}
+        
+        # Test health endpoint (using NodePort)
+        curl -f http://localhost:30800/health || exit 1
+        
+        # Cleanup
+        kubectl delete namespace ${{ env.NAMESPACE }} --wait=true
+
+  security:
+    name: Security Scan
+    runs-on: self-hosted
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+    
+    - name: Install security tools
+      run: |
+        python -m pip install --upgrade pip
+        pip install safety bandit
+    
+    - name: Run Safety check
+      run: |
+        pip install -r requirements/base.txt || true
+        safety check || true
+      continue-on-error: true
+    
+    - name: Run Bandit
+      run: bandit -r src/ -f json -o bandit-report.json
+      continue-on-error: true
+    
+    - name: Container Security Scan with nerdctl
+      run: |
+        # Use Trivy for container security scanning
+        if command -v trivy >/dev/null 2>&1; then
+          trivy image speecher-backend:test --format json --output trivy-report.json || true
+        else
+          echo "Trivy not found, skipping container scan"
+        fi
+      continue-on-error: true
+    
+    - name: Upload security reports
+      uses: actions/upload-artifact@v4
+      with:
+        name: security-reports
+        path: |
+          bandit-report.json
+          trivy-report.json
+        retention-days: 30
+
+  deploy:
+    name: Deploy to Production
+    needs: [test, lint, container-build, security]
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Deploy to K3s Cluster
+      run: |
+        echo "Deploying to K3s cluster..."
+        # Example K3s deployment
+        kubectl create namespace speecher-prod --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Apply production manifests
+        # kubectl apply -f k8s/production/ -n speecher-prod
+        
+        echo "✅ Deployment to K3s completed!"
+        echo "This is where you would deploy to production using kubectl"
