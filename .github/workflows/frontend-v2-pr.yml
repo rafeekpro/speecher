@@ -197,11 +197,11 @@ jobs:
           
           # Create a simple Dockerfile for testing
           cat > /tmp/frontend.Dockerfile << 'EOF'
-FROM nginx:alpine
-COPY src/react-frontend/build /usr/share/nginx/html
-EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
-EOF
+          FROM nginx:alpine
+          COPY src/react-frontend/build /usr/share/nginx/html
+          EXPOSE 80
+          CMD ["nginx", "-g", "daemon off;"]
+          EOF
           
           # Add the temporary Dockerfile to build context
           kubectl create configmap temp-dockerfile \
@@ -212,8 +212,10 @@ EOF
           DOCKERFILE_PATH="/workspace/Dockerfile"
         fi
         
-        # Frontend build job with Kaniko
-        cat <<EOF | kubectl apply -f -
+        # Frontend build job with Kaniko (simplified approach)
+        if [ ! -f "docker/react.Dockerfile" ] && [ ! -f "${{ env.FRONTEND_DIR }}/Dockerfile" ]; then
+          # Use temporary Dockerfile - deploy job with temp-dockerfile volume
+          kubectl apply -f - <<EOF
         apiVersion: batch/v1
         kind: Job
         metadata:
@@ -235,7 +237,9 @@ EOF
                 volumeMounts:
                 - name: build-context
                   mountPath: /workspace
-                $(if [ ! -f "docker/react.Dockerfile" ] && [ ! -f "${{ env.FRONTEND_DIR }}/Dockerfile" ]; then echo "- name: temp-dockerfile"; echo "  mountPath: /workspace"; fi)
+                - name: temp-dockerfile
+                  mountPath: /workspace/Dockerfile
+                  subPath: Dockerfile
                 resources:
                   requests:
                     memory: "1Gi"
@@ -247,13 +251,50 @@ EOF
               - name: build-context
                 configMap:
                   name: frontend-build-context
-              $(if [ ! -f "docker/react.Dockerfile" ] && [ ! -f "${{ env.FRONTEND_DIR }}/Dockerfile" ]; then echo "- name: temp-dockerfile"; echo "  configMap:"; echo "    name: temp-dockerfile"; fi)
+              - name: temp-dockerfile
+                configMap:
+                  name: temp-dockerfile
         EOF
+        else
+          # Use existing Dockerfile - deploy job with only build context
+          kubectl apply -f - <<EOF
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: frontend-build
+          namespace: frontend-build-${{ github.event.pull_request.number }}
+        spec:
+          template:
+            spec:
+              restartPolicy: Never
+              containers:
+              - name: kaniko
+                image: gcr.io/kaniko-project/executor:latest
+                args:
+                - --dockerfile=$DOCKERFILE_PATH
+                - --context=/workspace
+                - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
+                - --cache=true
+                - --cache-ttl=24h
+                volumeMounts:
+                - name: build-context
+                  mountPath: /workspace
+                resources:
+                  requests:
+                    memory: "1Gi"
+                    cpu: "500m"
+                  limits:
+                    memory: "2Gi"
+                    cpu: "1000m"
+              volumes:
+              - name: build-context
+                configMap:
+                  name: frontend-build-context
+        EOF
+        fi
         
         echo "⏳ Waiting for frontend build to complete..."
-        kubectl wait --for=condition=complete job/frontend-build \
-          --timeout=600s \
-          --namespace=frontend-build-${{ github.event.pull_request.number }} || {
+        kubectl wait --for=condition=complete job/frontend-build --timeout=600s --namespace=frontend-build-${{ github.event.pull_request.number }} || {
           echo "❌ Frontend build failed"
           kubectl logs job/frontend-build --namespace=frontend-build-${{ github.event.pull_request.number }} --tail=50
           echo "⚠️ Frontend build failed (may be expected if no build artifacts)"
