@@ -16,19 +16,29 @@ jobs:
     name: Run Tests
     runs-on: self-hosted
     
-    services:
-      mongodb:
-        image: mongo:6.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand({ping: 1})'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
     steps:
     - uses: actions/checkout@v4
+    
+    - name: Setup Docker compatibility for K3s runners
+      run: |
+        # Create docker symlink to nerdctl if needed
+        if ! command -v docker &> /dev/null && command -v nerdctl &> /dev/null; then
+          echo "Creating docker -> nerdctl symlink for compatibility"
+          sudo ln -sf $(which nerdctl) /usr/local/bin/docker
+        fi
+    
+    - name: Deploy MongoDB for tests
+      run: |
+        kubectl create namespace test-${{ github.run_id }} --dry-run=client -o yaml | kubectl apply -f -
+        kubectl run mongodb --image=mongo:6.0 --port=27017 \
+          --namespace=test-${{ github.run_id }} \
+          --env="MONGO_INITDB_ROOT_USERNAME=" \
+          --env="MONGO_INITDB_ROOT_PASSWORD="
+        kubectl expose pod mongodb --port=27017 --namespace=test-${{ github.run_id }}
+        kubectl wait --for=condition=ready pod/mongodb --namespace=test-${{ github.run_id }} --timeout=60s
+        # Port forward to make MongoDB accessible locally
+        kubectl port-forward -n test-${{ github.run_id }} pod/mongodb 27017:27017 &
+        sleep 5
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -71,6 +81,11 @@ jobs:
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
+    
+    - name: Cleanup test namespace
+      if: always()
+      run: |
+        kubectl delete namespace test-${{ github.run_id }} --wait=false || true
 
   lint:
     name: Lint Code
@@ -119,11 +134,17 @@ jobs:
     
     - name: Build Backend Image with nerdctl
       run: |
-        nerdctl build -t speecher-backend:test .
+        # Use K3s containerd namespace and socket
+        export CONTAINERD_ADDRESS=/run/k3s/containerd/containerd.sock
+        export CONTAINERD_NAMESPACE=k8s.io
+        sudo nerdctl --namespace k8s.io build -t speecher-backend:test .
     
     - name: Build Frontend Image with nerdctl  
       run: |
-        nerdctl build -f docker/react.Dockerfile -t speecher-frontend:test .
+        # Use K3s containerd namespace and socket
+        export CONTAINERD_ADDRESS=/run/k3s/containerd/containerd.sock
+        export CONTAINERD_NAMESPACE=k8s.io
+        sudo nerdctl --namespace k8s.io build -f docker/react.Dockerfile -t speecher-frontend:test .
     
     - name: Test with Kubernetes (Alternative to Docker Compose)
       run: |
