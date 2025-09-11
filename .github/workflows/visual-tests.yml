@@ -39,7 +39,7 @@ env:
 jobs:
   visual-tests:
     name: Visual Regression Testing
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, playwright, e2e]
     timeout-minutes: 30
     
     strategy:
@@ -294,7 +294,7 @@ EOF
 
   visual-test-summary:
     name: Visual Test Summary
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, playwright, e2e]
     needs: visual-tests
     if: always()
     
@@ -326,7 +326,7 @@ EOF
 
   update-baselines:
     name: Update Baseline Snapshots
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, playwright, e2e]
     if: github.event.inputs.update_snapshots == 'true'
     needs: visual-tests
     

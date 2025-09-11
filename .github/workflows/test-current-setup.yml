@@ -8,7 +8,7 @@ on:
 jobs:
   test-dependencies:
     name: Test All Dependencies
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, playwright, e2e]
     
     steps:
     - name: System Info

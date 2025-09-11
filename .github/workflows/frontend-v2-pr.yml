@@ -25,7 +25,7 @@ env:
 
 jobs:
   test-and-build:
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, playwright, e2e]
     
     strategy:
       matrix:
