@@ -54,7 +54,9 @@ jobs:
           --dry-run=client -o yaml | kubectl apply -f -
         
         # Kaniko build job
-        cat <<EOF | kubectl apply -f -
+        # Build the complete manifest based on cache availability
+        if [ "${{ steps.cache-check.outputs.cached }}" = "true" ]; then
+          cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
         metadata:
@@ -75,7 +77,7 @@ jobs:
                 - --target=runtime
                 - --cache=true
                 - --cache-ttl=24h
-                $(if [ "${{ steps.cache-check.outputs.cached }}" = "true" ]; then echo "- --cache-repo=speecher-test"; fi)
+                - --cache-repo=speecher-test
                 volumeMounts:
                 - name: build-context
                   mountPath: /workspace
@@ -91,6 +93,44 @@ jobs:
                 configMap:
                   name: build-context-${{ github.run_id }}
         EOF
+        else
+          cat <<EOF | kubectl apply -f -
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: kaniko-build-${{ github.run_id }}
+          namespace: build-${{ github.run_id }}
+        spec:
+          template:
+            spec:
+              restartPolicy: Never
+              containers:
+              - name: kaniko
+                image: gcr.io/kaniko-project/executor:latest
+                args:
+                - --dockerfile=/workspace/docker/test-optimized.Dockerfile
+                - --context=/workspace
+                - --destination=${{ env.TEST_IMAGE_TAG }}
+                - --destination=${{ env.TEST_IMAGE_LATEST }}
+                - --target=runtime
+                - --cache=true
+                - --cache-ttl=24h
+                volumeMounts:
+                - name: build-context
+                  mountPath: /workspace
+                resources:
+                  requests:
+                    memory: "1Gi"
+                    cpu: "500m"
+                  limits:
+                    memory: "2Gi"
+                    cpu: "1000m"
+              volumes:
+              - name: build-context
+                configMap:
+                  name: build-context-${{ github.run_id }}
+        EOF
+        fi
         
         echo "⏳ Waiting for Kaniko build to complete..."
         kubectl wait --for=condition=complete job/kaniko-build-${{ github.run_id }} \
