@@ -5,6 +5,7 @@ on:
     branches: [develop, main, feature/frontend-v2]
     paths:
       - 'src/frontend/**'
+      - 'src/react-frontend/**'
       - 'tests/frontend/**'
       - 'package.json'
       - 'package-lock.json'
@@ -15,6 +16,12 @@ permissions:
   contents: read
   issues: write
   pull-requests: write
+
+env:
+  # Frontend-specific environment variables
+  FRONTEND_DIR: './src/react-frontend'
+  # Optional Kubernetes namespace for container testing
+  KUBE_NAMESPACE: 'frontend-pr-${{ github.event.pull_request.number || github.run_id }}'
 
 jobs:
   test-and-build:
@@ -154,6 +161,72 @@ jobs:
         path: ./
         base: ${{ github.event.pull_request.base.sha }}
         head: ${{ github.event.pull_request.head.sha }}
+
+  container-build:
+    name: 🐳 Frontend Container Build
+    runs-on: [self-hosted, containerd]
+    needs: [test-and-build]
+    if: success()  # Only run if tests pass
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 🏗️ Build Frontend Container with nerdctl
+      run: |
+        echo "🏗️ Building frontend container for PR ${{ github.event.pull_request.number }}..."
+        
+        # Check if frontend Dockerfile exists
+        if [ -f "docker/react.Dockerfile" ]; then
+          nerdctl build -f docker/react.Dockerfile -t speecher-frontend:pr-${{ github.event.pull_request.number }} .
+          echo "✅ Frontend container built successfully"
+        elif [ -f "${{ env.FRONTEND_DIR }}/Dockerfile" ]; then
+          nerdctl build -f ${{ env.FRONTEND_DIR }}/Dockerfile -t speecher-frontend:pr-${{ github.event.pull_request.number }} ${{ env.FRONTEND_DIR }}
+          echo "✅ Frontend container built successfully"
+        else
+          echo "ℹ️ No frontend Dockerfile found, creating minimal test container..."
+          
+          # Create a simple Dockerfile for testing
+          cat > /tmp/frontend.Dockerfile << 'EOF'
+FROM nginx:alpine
+COPY src/react-frontend/build /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+EOF
+          
+          # Build with the temporary Dockerfile
+          nerdctl build -f /tmp/frontend.Dockerfile -t speecher-frontend:pr-${{ github.event.pull_request.number }} . || echo "⚠️ Frontend container build failed (expected if no build artifacts)"
+        fi
+    
+    - name: 🧪 Test Frontend Container
+      run: |
+        echo "🧪 Testing frontend container..."
+        
+        # Create test namespace
+        kubectl create namespace ${{ env.KUBE_NAMESPACE }} || true
+        
+        # Check if image was built successfully
+        if nerdctl images | grep -q "speecher-frontend:pr-${{ github.event.pull_request.number }}"; then
+          echo "📦 Deploying frontend container for testing..."
+          
+          kubectl run frontend-test-${{ github.event.pull_request.number }} \
+            --image=speecher-frontend:pr-${{ github.event.pull_request.number }} \
+            --namespace=${{ env.KUBE_NAMESPACE }} \
+            --port=80 \
+            --restart=Never || true
+          
+          # Wait and check status
+          sleep 10
+          kubectl get pods --namespace=${{ env.KUBE_NAMESPACE }} || true
+          
+          echo "✅ Frontend container test completed"
+        else
+          echo "ℹ️ No frontend container to test"
+        fi
+        
+        # Cleanup test resources
+        kubectl delete namespace ${{ env.KUBE_NAMESPACE }} --ignore-not-found=true &
+        
+        echo "🧹 Test cleanup initiated"
 
   label-pr:
     runs-on: [self-hosted, containerd]

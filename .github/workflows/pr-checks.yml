@@ -280,7 +280,7 @@ jobs:
   pr-status:
     name: ✅ PR Status Check
     runs-on: [self-hosted, containerd]
-    needs: [run-tests, code-quality, security-scan]  # Removed docker-build dependency temporarily
+    needs: [run-tests, code-quality, security-scan, container-build]  # Added container-build back
     if: always()
     
     steps:
@@ -299,7 +299,7 @@ jobs:
     #   with:
     #     script: |
     #       const checksPassed = '${{ needs.run-tests.result }}' !== 'failure' && 
-    #                           '${{ needs.docker-build.result }}' !== 'failure';
+    #                           '${{ needs.container-build.result }}' !== 'failure';
     #       
     #       const emoji = checksPassed ? '✅' : '❌';
     #       const status = checksPassed ? 'ready to merge' : 'needs fixes';
@@ -311,7 +311,7 @@ jobs:
     #       | Tests | ${{ needs.run-tests.result }} |
     #       | Code Quality | ${{ needs.code-quality.result }} |
     #       | Security | ${{ needs.security-scan.result }} |
-    #       | Docker Build | ${{ needs.docker-build.result }} |
+    #       | Container Build | ${{ needs.container-build.result }} |
     #       `;
     #       
     #       github.rest.issues.createComment({
