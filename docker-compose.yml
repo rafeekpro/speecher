@@ -105,14 +105,32 @@ services:
       dockerfile: docker/test.Dockerfile
     container_name: speecher-tests
     environment:
+      # Test database configuration - completely isolated from development
       MONGODB_URI: mongodb://speecher_user:speecher_pass@mongodb:27017/speecher_test?authSource=speecher
       MONGODB_DB: speecher_test
+      MONGODB_COLLECTION: transcriptions_test
+      
+      # Test isolation flag
+      TEST_ISOLATION: "true"
+      
+      # Backend service URL for integration tests
       BACKEND_URL: http://backend:8000
+      
+      # Python configuration
       PYTHONUNBUFFERED: 1
+      
+      # AWS Test Configuration (optional)
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      
+      # Test environment indicator
+      ENVIRONMENT: test
     volumes:
       - ./src:/app/src:ro
       - ./tests:/app/tests:ro
       - ./test_results:/app/test_results
+      - ./docker/scripts:/app/scripts:ro
     depends_on:
       mongodb:
         condition: service_healthy
@@ -122,7 +140,41 @@ services:
       - speecher-network
     profiles:
       - test  # Only run when explicitly requested
-    command: ["pytest", "tests/", "-v", "--tb=short", "--junit-xml=/app/test_results/results.xml"]
+    # Command includes database cleanup before tests
+    command: >
+      sh -c "
+        echo 'Initializing test environment...' &&
+        echo 'Cleaning up test database...' &&
+        python -c \"
+        import pymongo
+        from urllib.parse import quote_plus
+        
+        # Connect to MongoDB
+        client = pymongo.MongoClient('mongodb://speecher_user:speecher_pass@mongodb:27017/?authSource=speecher')
+        
+        # Drop the test database if it exists
+        print('Dropping existing test database...')
+        client.drop_database('speecher_test')
+        
+        # Create fresh test database
+        test_db = client['speecher_test']
+        
+        # Create test collections with proper indexes
+        print('Creating test collections...')
+        test_db.create_collection('transcriptions_test')
+        test_db['transcriptions_test'].create_index('created_at')
+        test_db['transcriptions_test'].create_index('user_id')
+        
+        # Verify database creation
+        print(f'Test database ready: {test_db.name}')
+        print(f'Collections: {test_db.list_collection_names()}')
+        
+        client.close()
+        print('Test database initialization complete!')
+        \" &&
+        echo 'Running tests with isolated database...' &&
+        pytest tests/ -v --tb=short --junit-xml=/app/test_results/results.xml --maxfail=10 -x
+      "
 
 volumes:
   mongodb_data:

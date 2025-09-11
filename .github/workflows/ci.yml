@@ -13,8 +13,319 @@ env:
   KUBE_NAMESPACE: 'ci-${{ github.run_id }}'
   MONGODB_POD: 'mongodb-${{ github.run_id }}'
   MONGODB_PORT: '27017'
+  # Container image settings
+  TEST_IMAGE_TAG: 'speecher-test:${{ github.sha }}'
+  TEST_IMAGE_LATEST: 'speecher-test:latest'
   
 jobs:
+  # Optimized containerized test job - builds and runs tests in container
+  test-optimized:
+    name: 🚀 Optimized Container Tests
+    runs-on: [self-hosted, containerd]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: 🔍 Check for cached test image
+      id: cache-check
+      run: |
+        echo "Checking for cached test image..."
+        if nerdctl images | grep -q "speecher-test.*latest"; then
+          echo "cached=true" >> $GITHUB_OUTPUT
+          echo "✅ Found cached test image"
+          nerdctl images | grep speecher-test
+        else
+          echo "cached=false" >> $GITHUB_OUTPUT
+          echo "📦 No cached image found, will build fresh"
+        fi
+    
+    - name: 🏗️ Build optimized test container
+      run: |
+        echo "🏗️ Building optimized test container with nerdctl..."
+        
+        # Build with cache from latest if available
+        if [ "${{ steps.cache-check.outputs.cached }}" = "true" ]; then
+          echo "📦 Using cached layers from speecher-test:latest..."
+          nerdctl build \
+            --cache-from ${{ env.TEST_IMAGE_LATEST }} \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --target runtime \
+            -f docker/test-optimized.Dockerfile \
+            -t ${{ env.TEST_IMAGE_TAG }} \
+            -t ${{ env.TEST_IMAGE_LATEST }} \
+            .
+        else
+          echo "🔨 Building fresh test container..."
+          nerdctl build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --target runtime \
+            -f docker/test-optimized.Dockerfile \
+            -t ${{ env.TEST_IMAGE_TAG }} \
+            -t ${{ env.TEST_IMAGE_LATEST }} \
+            .
+        fi
+        
+        echo "✅ Test container built successfully"
+        echo "📋 Image details:"
+        nerdctl images | grep speecher-test
+    
+    - name: 🏥 Verify container health
+      run: |
+        echo "🏥 Running container health check..."
+        
+        # Create test namespace
+        kubectl create namespace test-health-${{ github.run_id }} || true
+        
+        # Run health check in Kubernetes
+        kubectl run health-check-${{ github.run_id }} \
+          --image=${{ env.TEST_IMAGE_TAG }} \
+          --namespace=test-health-${{ github.run_id }} \
+          --restart=Never \
+          --command -- python /app/healthcheck.py
+        
+        # Wait for pod to complete
+        echo "⏳ Waiting for health check to complete..."
+        for i in {1..30}; do
+          POD_STATUS=$(kubectl get pod health-check-${{ github.run_id }} \
+            --namespace=test-health-${{ github.run_id }} \
+            -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+          
+          if [ "$POD_STATUS" = "Succeeded" ]; then
+            echo "✅ Health check completed successfully"
+            break
+          elif [ "$POD_STATUS" = "Failed" ] || [ "$POD_STATUS" = "Error" ]; then
+            echo "❌ Health check failed"
+            kubectl logs health-check-${{ github.run_id }} --namespace=test-health-${{ github.run_id }}
+            kubectl delete namespace test-health-${{ github.run_id }} --ignore-not-found=true
+            exit 1
+          fi
+          
+          echo "⏳ Health check status: $POD_STATUS ($i/30)"
+          sleep 1
+        done
+        
+        # Check final status
+        POD_STATUS=$(kubectl get pod health-check-${{ github.run_id }} \
+          --namespace=test-health-${{ github.run_id }} \
+          -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+        
+        if [ "$POD_STATUS" != "Succeeded" ]; then
+          echo "❌ Health check did not complete successfully (Status: $POD_STATUS)"
+          kubectl logs health-check-${{ github.run_id }} --namespace=test-health-${{ github.run_id }} || true
+          kubectl delete namespace test-health-${{ github.run_id }} --ignore-not-found=true
+          exit 1
+        fi
+        
+        echo "✅ Container health check passed"
+        kubectl delete namespace test-health-${{ github.run_id }} --ignore-not-found=true
+    
+    - name: 🗃️ Deploy MongoDB for tests
+      run: |
+        echo "🚀 Creating test namespace..."
+        kubectl create namespace ${{ env.KUBE_NAMESPACE }} || true
+        
+        echo "🗃️ Deploying MongoDB pod..."
+        cat <<EOF | kubectl apply -f -
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: ${{ env.MONGODB_POD }}
+          namespace: ${{ env.KUBE_NAMESPACE }}
+          labels:
+            app: mongodb
+            test-run: "${{ github.run_id }}"
+        spec:
+          containers:
+          - name: mongodb
+            image: mongo:6.0
+            ports:
+            - containerPort: 27017
+            env:
+            - name: MONGO_INITDB_ROOT_USERNAME
+              value: root
+            - name: MONGO_INITDB_ROOT_PASSWORD
+              value: example
+            resources:
+              requests:
+                memory: "256Mi"
+                cpu: "250m"
+              limits:
+                memory: "512Mi"
+                cpu: "500m"
+        EOF
+        
+        echo "⏳ Waiting for MongoDB to be ready..."
+        kubectl wait --for=condition=ready pod/${{ env.MONGODB_POD }} \
+          --timeout=60s \
+          --namespace=${{ env.KUBE_NAMESPACE }}
+        
+        echo "✅ MongoDB is ready"
+    
+    - name: 🧪 Run tests in Kubernetes
+      id: run-tests
+      run: |
+        echo "🧪 Deploying test pod with MongoDB connection..."
+        
+        # Create ConfigMap for test configuration
+        cat <<EOF | kubectl apply -f -
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: test-config-${{ github.run_id }}
+          namespace: ${{ env.KUBE_NAMESPACE }}
+        data:
+          MONGODB_URI: "mongodb://root:example@${{ env.MONGODB_POD }}:27017"
+          S3_BUCKET_NAME: "test-bucket"
+          AZURE_STORAGE_ACCOUNT: "test-account"
+          GCP_PROJECT_ID: "test-project"
+          ENVIRONMENT: "test"
+          PYTHONPATH: "/app"
+        EOF
+        
+        # Deploy test Job
+        cat <<EOF | kubectl apply -f -
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: test-runner-${{ github.run_id }}
+          namespace: ${{ env.KUBE_NAMESPACE }}
+        spec:
+          backoffLimit: 0
+          activeDeadlineSeconds: 600
+          template:
+            metadata:
+              labels:
+                app: test-runner
+                test-run: "${{ github.run_id }}"
+            spec:
+              restartPolicy: Never
+              containers:
+              - name: test-runner
+                image: ${{ env.TEST_IMAGE_TAG }}
+                command: ["/app/run_tests.sh"]
+                args: ["all", "auto", "verbose"]
+                envFrom:
+                - configMapRef:
+                    name: test-config-${{ github.run_id }}
+                volumeMounts:
+                - name: test-results
+                  mountPath: /app/test_results
+                - name: coverage
+                  mountPath: /app/coverage
+                resources:
+                  requests:
+                    memory: "512Mi"
+                    cpu: "500m"
+                  limits:
+                    memory: "1Gi"
+                    cpu: "1000m"
+              volumes:
+              - name: test-results
+                emptyDir: {}
+              - name: coverage
+                emptyDir: {}
+        EOF
+        
+        echo "⏳ Waiting for tests to complete..."
+        kubectl wait --for=condition=complete job/test-runner-${{ github.run_id }} \
+          --timeout=600s \
+          --namespace=${{ env.KUBE_NAMESPACE }} || {
+            echo "❌ Tests failed or timed out"
+            echo "📋 Test logs:"
+            kubectl logs job/test-runner-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --tail=100
+            echo "test_status=failed" >> $GITHUB_OUTPUT
+            exit 1
+          }
+        
+        echo "✅ Tests completed successfully"
+        echo "test_status=success" >> $GITHUB_OUTPUT
+        
+        # Get test logs for artifact
+        kubectl logs job/test-runner-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} > test-output.log
+    
+    - name: 📊 Extract test results
+      if: always()
+      run: |
+        echo "📊 Extracting test results from container..."
+        
+        # Get the pod name from the job
+        POD_NAME=$(kubectl get pods \
+          --namespace=${{ env.KUBE_NAMESPACE }} \
+          -l app=test-runner,test-run=${{ github.run_id }} \
+          -o jsonpath='{.items[0].metadata.name}')
+        
+        if [ -n "$POD_NAME" ]; then
+          echo "📦 Found test pod: $POD_NAME"
+          
+          # Create local directories for results
+          mkdir -p ./test_results ./coverage_reports
+          
+          # Copy test results
+          kubectl cp ${{ env.KUBE_NAMESPACE }}/$POD_NAME:/app/test_results ./test_results || true
+          kubectl cp ${{ env.KUBE_NAMESPACE }}/$POD_NAME:/app/coverage ./coverage_reports || true
+          
+          # Check if files were copied
+          if [ -f "./test_results/junit.xml" ]; then
+            echo "✅ JUnit results extracted"
+          fi
+          
+          if [ -f "./test_results/coverage.xml" ]; then
+            echo "✅ Coverage XML extracted"
+            # Display coverage summary
+            python -c "
+        import xml.etree.ElementTree as ET
+        try:
+            tree = ET.parse('./test_results/coverage.xml')
+            root = tree.getroot()
+            coverage = float(root.attrib.get('line-rate', 0)) * 100
+            print(f'📈 Overall test coverage: {coverage:.2f}%')
+        except Exception as e:
+            print(f'Could not parse coverage: {e}')
+        " || true
+          fi
+        else
+          echo "⚠️ Could not find test pod for result extraction"
+        fi
+    
+    - name: 📤 Upload test artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-optimized
+        path: |
+          test-output.log
+          test_results/
+          coverage_reports/
+        retention-days: 30
+    
+    - name: 📈 Upload coverage to Codecov
+      if: always() && steps.run-tests.outputs.test_status == 'success'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./test_results/coverage.xml
+        flags: optimized-tests
+        name: codecov-optimized
+        fail_ci_if_error: false
+    
+    - name: 🧹 Cleanup Kubernetes resources
+      if: always()
+      run: |
+        echo "🧹 Cleaning up Kubernetes resources..."
+        
+        # Delete namespace (removes all resources within it)
+        kubectl delete namespace ${{ env.KUBE_NAMESPACE }} --ignore-not-found=true --grace-period=30 &
+        
+        echo "✅ Cleanup initiated (namespace deletion continues in background)"
+    
+    - name: 🏷️ Tag image for cache (on success)
+      if: success()
+      run: |
+        echo "🏷️ Tagging successful test image for cache..."
+        # Image is already tagged as latest during build
+        echo "✅ Image cached as ${{ env.TEST_IMAGE_LATEST }}"
+
+  # Original test job - runs tests directly with Python and MongoDB port-forwarding
+  # Kept for compatibility and as a fallback path while test-optimized stabilizes
   test:
     name: Run Tests
     runs-on: [self-hosted, containerd]
@@ -39,25 +350,101 @@ jobs:
           --env="MONGO_INITDB_ROOT_PASSWORD=example" \
           --restart=Never
         
-        echo "⏳ Waiting for MongoDB to be ready..."
+        echo "⏳ Waiting for MongoDB pod to be ready..."
         kubectl wait --for=condition=ready pod/${{ env.MONGODB_POD }} \
           --timeout=120s \
           --namespace=${{ env.KUBE_NAMESPACE }} || (
-            echo "⚠️ MongoDB not ready, showing pod logs:"
-            kubectl logs ${{ env.MONGODB_POD }} --namespace=${{ env.KUBE_NAMESPACE }}
-            echo "Continuing with tests anyway..."
+            echo "⚠️ MongoDB pod not ready after 120s, checking status..."
+            kubectl describe pod ${{ env.MONGODB_POD }} --namespace=${{ env.KUBE_NAMESPACE }}
+            kubectl logs ${{ env.MONGODB_POD }} --namespace=${{ env.KUBE_NAMESPACE }} || true
+            exit 1
           )
         
-        echo "🔗 Setting up port forwarding..."
-        kubectl port-forward pod/${{ env.MONGODB_POD }} \
-          ${{ env.MONGODB_PORT }}:${{ env.MONGODB_PORT }} \
-          --namespace=${{ env.KUBE_NAMESPACE }} &
+        echo "🔗 Setting up port forwarding with retry logic..."
+        PORT_FORWARD_PID=""
+        MAX_RETRIES=5
+        RETRY_COUNT=0
         
-        sleep 15
-        echo "✅ MongoDB setup completed"
+        while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+          echo "📡 Port forwarding attempt $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+          
+          # Kill any existing port-forward process for this pod
+          pkill -f "kubectl port-forward.*${{ env.MONGODB_POD }}.*${{ env.KUBE_NAMESPACE }}" || true
+          sleep 2
+          
+          # Start port forwarding in background and capture PID
+          kubectl port-forward pod/${{ env.MONGODB_POD }} \
+            ${{ env.MONGODB_PORT }}:${{ env.MONGODB_PORT }} \
+            --namespace=${{ env.KUBE_NAMESPACE }} &
+          PORT_FORWARD_PID=$!
+          
+          # Store PID for cleanup
+          echo $PORT_FORWARD_PID > /tmp/mongodb-port-forward-${{ github.run_id }}.pid
+          
+          # Wait a moment for port forwarding to establish
+          sleep 3
+          
+          # Check if port-forward process is still running
+          if ! kill -0 $PORT_FORWARD_PID 2>/dev/null; then
+            echo "⚠️ Port forward process died immediately, checking pod status..."
+            kubectl get pod ${{ env.MONGODB_POD }} --namespace=${{ env.KUBE_NAMESPACE }}
+            kubectl logs ${{ env.MONGODB_POD }} --namespace=${{ env.KUBE_NAMESPACE }} --tail=20
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            continue
+          fi
+          
+          # Verify MongoDB is accessible with timeout
+          echo "🔍 Verifying MongoDB connection on localhost:${{ env.MONGODB_PORT }}..."
+          CONNECTION_SUCCESS=false
+          
+          for i in {1..30}; do
+            if nc -z -w 1 localhost ${{ env.MONGODB_PORT }} 2>/dev/null; then
+              echo "✅ MongoDB port ${{ env.MONGODB_PORT }} is accessible!"
+              CONNECTION_SUCCESS=true
+              break
+            fi
+            echo "⏳ Waiting for MongoDB connection... ($i/30)"
+            sleep 1
+          done
+          
+          if [ "$CONNECTION_SUCCESS" = true ]; then
+            echo "🎉 MongoDB setup completed successfully!"
+            echo "📌 Port forward PID: $PORT_FORWARD_PID"
+            
+            # Double-check with MongoDB client if possible
+            if command -v mongosh &> /dev/null; then
+              mongosh --eval "db.version()" mongodb://localhost:${{ env.MONGODB_PORT }} --quiet || true
+            fi
+            break
+          else
+            echo "❌ Failed to connect to MongoDB on attempt $((RETRY_COUNT + 1))"
+            # Kill the failed port-forward process
+            kill $PORT_FORWARD_PID 2>/dev/null || true
+            RETRY_COUNT=$((RETRY_COUNT + 1))
+            
+            if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+              echo "⏳ Waiting 5 seconds before retry..."
+              sleep 5
+            fi
+          fi
+        done
         
-        # Verify MongoDB is accessible
-        timeout 30 bash -c 'until nc -z localhost 27017; do sleep 1; done' || echo "⚠️ MongoDB port check timed out"
+        if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
+          echo "❌ Failed to establish MongoDB port forwarding after $MAX_RETRIES attempts"
+          echo "📋 Final diagnostics:"
+          kubectl get pod ${{ env.MONGODB_POD }} --namespace=${{ env.KUBE_NAMESPACE }}
+          kubectl describe pod ${{ env.MONGODB_POD }} --namespace=${{ env.KUBE_NAMESPACE }}
+          kubectl logs ${{ env.MONGODB_POD }} --namespace=${{ env.KUBE_NAMESPACE }} --tail=50
+          exit 1
+        fi
+        
+        # Final verification
+        echo "🔒 Final MongoDB connectivity check..."
+        timeout 10 bash -c 'while ! nc -z localhost ${{ env.MONGODB_PORT }}; do sleep 0.5; done' || {
+          echo "❌ Final verification failed - MongoDB not accessible"
+          exit 1
+        }
+        echo "✅ MongoDB is ready and accessible on localhost:${{ env.MONGODB_PORT }}"
     
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -98,16 +485,26 @@ jobs:
       run: |
         echo "🧹 Cleaning up Kubernetes resources..."
         
-        # Kill port-forward processes
-        pkill -f "kubectl port-forward.*${{ env.MONGODB_POD }}" || true
-        pkill -f "kubectl port-forward.*${{ env.KUBE_NAMESPACE }}" || true
+        # Kill port-forward process using stored PID
+        if [ -f /tmp/mongodb-port-forward-${{ github.run_id }}.pid ]; then
+          PID=$(cat /tmp/mongodb-port-forward-${{ github.run_id }}.pid)
+          echo "📌 Killing port-forward process with PID: $PID"
+          kill $PID 2>/dev/null || true
+          rm -f /tmp/mongodb-port-forward-${{ github.run_id }}.pid
+        fi
+        
+        # Also kill any remaining port-forward processes for this namespace (fallback)
+        pkill -f "kubectl port-forward.*${{ env.MONGODB_POD }}.*${{ env.KUBE_NAMESPACE }}" || true
         
         # Clean up MongoDB pod
+        echo "🗑️ Deleting MongoDB pod..."
         kubectl delete pod ${{ env.MONGODB_POD }} \
           --namespace=${{ env.KUBE_NAMESPACE }} \
-          --ignore-not-found=true
+          --ignore-not-found=true \
+          --grace-period=5
         
         # Clean up namespace (this removes all resources in the namespace)
+        echo "🗑️ Deleting namespace ${{ env.KUBE_NAMESPACE }}..."
         kubectl delete namespace ${{ env.KUBE_NAMESPACE }} --ignore-not-found=true &
         
         echo "✅ Cleanup initiated (namespace deletion continues in background)"
@@ -190,22 +587,63 @@ jobs:
           --namespace=test-${{ github.run_id }} \
           --port=8000 \
           --restart=Never \
-          --env="ENVIRONMENT=test" || true
+          --env="ENVIRONMENT=test"
         
-        # Wait and test
-        sleep 10
-        kubectl get pods --namespace=test-${{ github.run_id }}
+        # Wait for pod to be ready
+        echo "⏳ Waiting for backend pod to be ready..."
+        kubectl wait --for=condition=ready pod/speecher-backend-test \
+          --timeout=60s \
+          --namespace=test-${{ github.run_id }} || {
+            echo "⚠️ Backend pod not ready, checking logs..."
+            kubectl logs speecher-backend-test --namespace=test-${{ github.run_id }} --tail=20 || true
+            kubectl get pods --namespace=test-${{ github.run_id }}
+          }
         
-        # Port forward and test health endpoint
-        kubectl port-forward pod/speecher-backend-test 8000:8000 \
-          --namespace=test-${{ github.run_id }} &
-        sleep 5
+        # Port forward with retry logic
+        echo "🔗 Setting up port forwarding for backend test..."
+        BACKEND_PORT_FORWARD_PID=""
+        PORT_FORWARD_SUCCESS=false
         
-        # Test health endpoint
-        timeout 30 bash -c 'until nc -z localhost 8000; do sleep 1; done' || echo "⚠️ Backend port not accessible"
-        curl -f http://localhost:8000/health || echo "⚠️ Health check failed (expected for some setups)"
+        for attempt in {1..3}; do
+          echo "📡 Port forwarding attempt $attempt/3..."
+          
+          # Kill any existing port-forward
+          pkill -f "kubectl port-forward.*speecher-backend-test.*test-${{ github.run_id }}" || true
+          sleep 1
+          
+          # Start port forwarding
+          kubectl port-forward pod/speecher-backend-test 8000:8000 \
+            --namespace=test-${{ github.run_id }} &
+          BACKEND_PORT_FORWARD_PID=$!
+          echo $BACKEND_PORT_FORWARD_PID > /tmp/backend-port-forward-${{ github.run_id }}.pid
+          
+          # Wait and verify
+          sleep 3
+          
+          if nc -z -w 1 localhost 8000 2>/dev/null; then
+            echo "✅ Backend port 8000 is accessible!"
+            PORT_FORWARD_SUCCESS=true
+            break
+          else
+            echo "⚠️ Port 8000 not accessible on attempt $attempt"
+            kill $BACKEND_PORT_FORWARD_PID 2>/dev/null || true
+            [ $attempt -lt 3 ] && sleep 3
+          fi
+        done
+        
+        if [ "$PORT_FORWARD_SUCCESS" = true ]; then
+          # Test health endpoint
+          echo "🔍 Testing health endpoint..."
+          curl -f http://localhost:8000/health || echo "⚠️ Health check failed (may be expected for some setups)"
+        else
+          echo "⚠️ Could not establish port forwarding to backend container"
+        fi
         
         # Cleanup
+        if [ -f /tmp/backend-port-forward-${{ github.run_id }}.pid ]; then
+          kill $(cat /tmp/backend-port-forward-${{ github.run_id }}.pid) 2>/dev/null || true
+          rm -f /tmp/backend-port-forward-${{ github.run_id }}.pid
+        fi
         pkill -f "kubectl port-forward.*speecher-backend-test" || true
         kubectl delete namespace test-${{ github.run_id }} --ignore-not-found=true &
         
@@ -248,7 +686,7 @@ jobs:
 
   deploy:
     name: 🚀 Deploy to Production
-    needs: [test, lint, security, container-build]  # Added container-build back
+    needs: [test-optimized, test, lint, security, container-build]  # Includes both test paths
     runs-on: [self-hosted, containerd]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
