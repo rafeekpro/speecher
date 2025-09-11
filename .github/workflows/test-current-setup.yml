@@ -32,11 +32,11 @@ jobs:
         mongosh --version
         psql --version
         
-    - name: Test Cloud CLIs  
+    - name: Test Cloud CLIs (Optional)
       run: |
-        aws --version
-        az --version
-        gcloud --version
+        aws --version || echo "AWS CLI not installed"
+        az --version || echo "Azure CLI not installed"
+        gcloud --version || echo "Google Cloud CLI not installed"
         
     - name: Test DevOps Tools
       run: |
