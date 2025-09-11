@@ -23,7 +23,7 @@ concurrency:
 jobs:
   changes:
     name: Detect Changes
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -58,7 +58,7 @@ jobs:
 
   run-tests:
     name: 🧪 Run All Tests
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: changes
     # Run tests if backend/tests changed OR if path detection failed (fail-safe)
     if: |
@@ -153,7 +153,7 @@ jobs:
 
   code-quality:
     name: 🎨 Code Quality
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: changes
     # Run if backend/frontend changed OR if path detection failed
     if: |
@@ -200,7 +200,7 @@ jobs:
 
   security-scan:
     name: 🔒 Security Scan
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     
     steps:
     - name: 📥 Checkout code
@@ -231,7 +231,7 @@ jobs:
 
   docker-build:
     name: 🐳 Docker Build Test
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: changes
     # Run if backend/frontend changed OR if path detection failed
     if: |
@@ -261,7 +261,7 @@ jobs:
 
   pr-status:
     name: ✅ PR Status Check
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: [run-tests, code-quality, security-scan, docker-build]
     if: always()
     

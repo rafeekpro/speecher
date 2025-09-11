@@ -1,0 +1,39 @@
+name: Test Self-Hosted Runner
+
+on:
+  push:
+    branches: [ feature/integrate-sidebar-layout ]
+  workflow_dispatch:
+
+jobs:
+  test-runner:
+    name: Test Runner Connection
+    runs-on: self-hosted
+    
+    steps:
+    - name: Check runner info
+      run: |
+        echo "Runner name: ${{ runner.name }}"
+        echo "Runner OS: ${{ runner.os }}"
+        echo "Runner arch: ${{ runner.arch }}"
+        echo "Working directory: $(pwd)"
+        echo "Available tools:"
+        docker --version || echo "Docker not found"
+        node --version || echo "Node not found"
+        python3 --version || echo "Python not found"
+    
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: List files
+      run: |
+        echo "Repository contents:"
+        ls -la
+        
+    - name: Test Docker
+      run: |
+        docker ps
+        docker compose version || echo "Docker Compose not found"
+    
+    - name: Success message
+      run: echo "✅ Self-hosted runner is working correctly!"

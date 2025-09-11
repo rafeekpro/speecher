@@ -13,7 +13,7 @@ env:
 jobs:
   test:
     name: Run Tests
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     
     services:
       mongodb:
@@ -73,7 +73,7 @@ jobs:
 
   lint:
     name: Lint Code
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     
     steps:
     - uses: actions/checkout@v4
@@ -106,7 +106,7 @@ jobs:
 
   docker:
     name: Build Docker Images
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     
     steps:
     - uses: actions/checkout@v4
@@ -133,7 +133,7 @@ jobs:
 
   security:
     name: Security Scan
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     
     steps:
     - uses: actions/checkout@v4
@@ -169,7 +169,7 @@ jobs:
   deploy:
     name: Deploy to Production
     needs: [test, lint, docker, security]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
