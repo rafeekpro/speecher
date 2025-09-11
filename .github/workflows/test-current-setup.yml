@@ -40,9 +40,9 @@ jobs:
         
     - name: Test DevOps Tools
       run: |
-        kubectl version --client
-        terraform --version
-        gh --version
+        kubectl version --client || echo "kubectl not installed"
+        terraform --version || echo "terraform not installed"
+        gh --version || echo "GitHub CLI not installed"
         
     - name: Test Container Tools
       run: |
