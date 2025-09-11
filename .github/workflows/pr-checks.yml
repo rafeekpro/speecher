@@ -83,12 +83,21 @@ jobs:
     - name: 📥 Checkout code
       uses: actions/checkout@v4
     
-    - name: 🗃️ Setup MongoDB with kubectl (temporary containerd solution)
+    - name: 🗃️ Setup MongoDB with kubectl
       run: |
-        echo "Setting up MongoDB using kubectl..."
-        kubectl run mongodb-pr --image=mongo:6.0 --port=27017 --env="MONGO_INITDB_ROOT_USERNAME=root" --env="MONGO_INITDB_ROOT_PASSWORD=example" || true
-        kubectl wait --for=condition=ready pod/mongodb-pr --timeout=60s || echo "MongoDB pod not ready, continuing with tests"
-        kubectl port-forward pod/mongodb-pr 27017:27017 &
+        echo "Setting up MongoDB using kubectl in github-runner namespace..."
+        kubectl run mongodb-pr-${{ github.event.pull_request.number || github.run_id }} \
+          --image=mongo:6.0 --port=27017 \
+          --namespace=github-runner \
+          --env="MONGO_INITDB_ROOT_USERNAME=root" \
+          --env="MONGO_INITDB_ROOT_PASSWORD=example" \
+          --labels="test-run=${{ github.event.pull_request.number || github.run_id }}" || true
+        kubectl wait --for=condition=ready \
+          pod/mongodb-pr-${{ github.event.pull_request.number || github.run_id }} \
+          --timeout=60s --namespace=github-runner || echo "MongoDB pod not ready, continuing with tests"
+        kubectl port-forward \
+          pod/mongodb-pr-${{ github.event.pull_request.number || github.run_id }} 27017:27017 \
+          --namespace=github-runner &
         sleep 10
         echo "MongoDB setup completed"
     
@@ -124,7 +133,8 @@ jobs:
       if: always()
       run: |
         echo "Cleaning up MongoDB resources..."
-        kubectl delete pod mongodb-pr --ignore-not-found=true
+        kubectl delete pod mongodb-pr-${{ github.event.pull_request.number || github.run_id }} \
+          --namespace=github-runner --ignore-not-found=true
         pkill -f "kubectl port-forward" || true
     
     

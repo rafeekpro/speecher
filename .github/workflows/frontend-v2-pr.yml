@@ -20,8 +20,8 @@ permissions:
 env:
   # Frontend-specific environment variables
   FRONTEND_DIR: './src/react-frontend'
-  # Optional Kubernetes namespace for container testing
-  KUBE_NAMESPACE: 'frontend-pr-${{ github.event.pull_request.number || github.run_id }}'
+  # Use existing github-runner namespace for all operations
+  KUBE_NAMESPACE: 'github-runner'
 
 jobs:
   test-and-build:
@@ -307,19 +307,19 @@ jobs:
       run: |
         echo "🧪 Testing Kaniko-built frontend container..."
         
-        # Create test namespace
-        kubectl create namespace frontend-test-${{ github.event.pull_request.number }} || true
+        # Use existing github-runner namespace for testing
+        echo "📦 Deploying frontend container for testing in github-runner namespace..."
         
         # Deploy frontend container for testing
-        echo "📦 Deploying frontend container for testing..."
         cat <<EOF | kubectl apply -f -
         apiVersion: v1
         kind: Pod
         metadata:
-          name: frontend-test
-          namespace: frontend-test-${{ github.event.pull_request.number }}
+          name: frontend-test-pr-${{ github.event.pull_request.number }}
+          namespace: github-runner
           labels:
             app: frontend-test
+            pr-number: "${{ github.event.pull_request.number }}"
         spec:
           restartPolicy: Never
           containers:
@@ -341,11 +341,11 @@ jobs:
         echo "⏳ Waiting for frontend pod status..."
         sleep 10
         
-        POD_STATUS=$(kubectl get pod frontend-test --namespace=frontend-test-${{ github.event.pull_request.number }} -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+        POD_STATUS=$(kubectl get pod frontend-test-pr-${{ github.event.pull_request.number }} --namespace=github-runner -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
         echo "📋 Frontend container status: $POD_STATUS"
         
         # Get pod details for debugging
-        kubectl get pods --namespace=frontend-test-${{ github.event.pull_request.number }} || true
+        kubectl get pods --namespace=github-runner -l pr-number="${{ github.event.pull_request.number }}" || true
         
         if [ "$POD_STATUS" = "Running" ] || [ "$POD_STATUS" = "Succeeded" ]; then
           echo "✅ Frontend container test successful"
@@ -353,13 +353,13 @@ jobs:
           # Test basic nginx functionality if container is running
           if [ "$POD_STATUS" = "Running" ]; then
             echo "🔍 Testing nginx functionality..."
-            kubectl exec frontend-test --namespace=frontend-test-${{ github.event.pull_request.number }} \
+            kubectl exec frontend-test-pr-${{ github.event.pull_request.number }} --namespace=github-runner \
               -- nginx -t || echo "⚠️ Nginx config test failed (may be expected)"
           fi
         else
           echo "⚠️ Frontend container test status: $POD_STATUS"
-          kubectl logs frontend-test --namespace=frontend-test-${{ github.event.pull_request.number }} --tail=20 || true
-          kubectl describe pod frontend-test --namespace=frontend-test-${{ github.event.pull_request.number }} || true
+          kubectl logs frontend-test-pr-${{ github.event.pull_request.number }} --namespace=github-runner --tail=20 || true
+          kubectl describe pod frontend-test-pr-${{ github.event.pull_request.number }} --namespace=github-runner || true
         fi
         
         # Cleanup test resources

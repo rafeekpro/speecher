@@ -526,12 +526,11 @@ jobs:
     
     - name: Deploy to K3s Cluster
       run: |
-        echo "Deploying to K3s cluster..."
-        # Example K3s deployment
-        kubectl create namespace speecher-prod --dry-run=client -o yaml | kubectl apply -f -
+        echo "Deploying to K3s cluster using github-runner namespace..."
+        # Use existing github-runner namespace for production deployment
         
-        # Apply production manifests
-        # kubectl apply -f k8s/production/ -n speecher-prod
+        # Apply production manifests to github-runner namespace
+        # kubectl apply -f k8s/production/ --namespace=github-runner
         
         echo "✅ Deployment to K3s completed!"
-        echo "This is where you would deploy to production using kubectl"
+        echo "This is where you would deploy to production using kubectl in github-runner namespace"
