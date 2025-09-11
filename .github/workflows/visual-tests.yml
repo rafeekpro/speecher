@@ -31,7 +31,7 @@ concurrency:
 jobs:
   visual-tests:
     name: Visual Regression Testing
-    runs-on: self-hosted
+    runs-on: [self-hosted, containerd]
     timeout-minutes: 30
     
     strategy:
@@ -196,7 +196,7 @@ jobs:
 
   visual-test-summary:
     name: Visual Test Summary
-    runs-on: self-hosted
+    runs-on: [self-hosted, containerd]
     needs: visual-tests
     if: always()
     
@@ -228,7 +228,7 @@ jobs:
 
   update-baselines:
     name: Update Baseline Snapshots
-    runs-on: self-hosted
+    runs-on: [self-hosted, containerd]
     if: github.event.inputs.update_snapshots == 'true'
     needs: visual-tests
     

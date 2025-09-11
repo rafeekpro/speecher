@@ -23,7 +23,7 @@ concurrency:
 jobs:
   changes:
     name: Detect Changes
-    runs-on: self-hosted
+    runs-on: [self-hosted, containerd]
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -58,7 +58,7 @@ jobs:
 
   run-tests:
     name: 🧪 Run All Tests
-    runs-on: self-hosted
+    runs-on: [self-hosted, containerd]
     needs: changes
     # Run tests if backend/tests changed OR if path detection failed (fail-safe)
     if: |
@@ -67,20 +67,30 @@ jobs:
        needs.changes.outputs.tests == 'true' || 
        needs.changes.result == 'failure')
     
-    services:
-      mongodb:
-        image: mongo:6.0
-        ports:
-          - 27017:27017
-        options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand({ping: 1})'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # Temporarily disabled - replace with kubectl run equivalent
+    # services:
+    #   mongodb:
+    #     image: mongo:6.0
+    #     ports:
+    #       - 27017:27017
+    #     options: >-
+    #       --health-cmd "mongosh --eval 'db.adminCommand({ping: 1})'"
+    #       --health-interval 10s
+    #       --health-timeout 5s
+    #       --health-retries 5
     
     steps:
     - name: 📥 Checkout code
       uses: actions/checkout@v4
+    
+    - name: 🗃️ Setup MongoDB with kubectl (temporary containerd solution)
+      run: |
+        echo "Setting up MongoDB using kubectl..."
+        kubectl run mongodb-pr --image=mongo:6.0 --port=27017 --env="MONGO_INITDB_ROOT_USERNAME=root" --env="MONGO_INITDB_ROOT_PASSWORD=example" || true
+        kubectl wait --for=condition=ready pod/mongodb-pr --timeout=60s || echo "MongoDB pod not ready, continuing with tests"
+        kubectl port-forward pod/mongodb-pr 27017:27017 &
+        sleep 10
+        echo "MongoDB setup completed"
     
     - name: 🐍 Set up Python
       uses: actions/setup-python@v4
@@ -109,6 +119,13 @@ jobs:
         GCP_PROJECT_ID: test-project
       run: |
         pytest tests/ -v --cov=src --cov-report=xml --cov-report=term-missing --cov-fail-under=70
+    
+    - name: 🧹 Cleanup MongoDB
+      if: always()
+      run: |
+        echo "Cleaning up MongoDB resources..."
+        kubectl delete pod mongodb-pr --ignore-not-found=true
+        pkill -f "kubectl port-forward" || true
     
     
     - name: 📊 Upload test results
@@ -153,7 +170,7 @@ jobs:
 
   code-quality:
     name: 🎨 Code Quality
-    runs-on: self-hosted
+    runs-on: [self-hosted, containerd]
     needs: changes
     # Run if backend/frontend changed OR if path detection failed
     if: |
@@ -200,7 +217,7 @@ jobs:
 
   security-scan:
     name: 🔒 Security Scan
-    runs-on: self-hosted
+    runs-on: [self-hosted, containerd]
     
     steps:
     - name: 📥 Checkout code
@@ -229,47 +246,47 @@ jobs:
         path: |
           bandit-report.json
 
-  docker-build:
-    name: 🐳 Docker Build Test
-    runs-on: self-hosted
-    needs: changes
-    # Run if backend/frontend changed OR if path detection failed
-    if: |
-      always() &&
-      (needs.changes.outputs.backend == 'true' || 
-       needs.changes.outputs.frontend == 'true' ||
-       needs.changes.result == 'failure')
-    
-    steps:
-    - name: 📥 Checkout code
-      uses: actions/checkout@v4
-    
-    - name: 🔧 Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-    
-    - name: 🏗️ Build Backend Docker image
-      run: |
-        docker build -t speecher-backend:pr-${{ github.event.pull_request.number }} .
-    
-    - name: 🏗️ Build Frontend Docker image
-      run: |
-        docker build -f docker/react.Dockerfile -t speecher-frontend:pr-${{ github.event.pull_request.number }} .
-    
-    - name: 🧪 Test Docker Compose configuration
-      run: |
-        docker compose config
+  # Temporarily disabled - Docker not available on containerd runners yet
+  # docker-build:
+  #   name: 🐳 Docker Build Test
+  #   runs-on: [self-hosted, containerd]
+  #   needs: changes
+  #   # Run if backend/frontend changed OR if path detection failed
+  #   if: |
+  #     always() &&
+  #     (needs.changes.outputs.backend == 'true' || 
+  #      needs.changes.outputs.frontend == 'true' ||
+  #      needs.changes.result == 'failure')
+  #   
+  #   steps:
+  #   - name: 📥 Checkout code
+  #     uses: actions/checkout@v4
+  #   
+  #   - name: 🔧 Set up Docker Buildx
+  #     uses: docker/setup-buildx-action@v2
+  #   
+  #   - name: 🏗️ Build Backend Docker image
+  #     run: |
+  #       docker build -t speecher-backend:pr-${{ github.event.pull_request.number }} .
+  #   
+  #   - name: 🏗️ Build Frontend Docker image
+  #     run: |
+  #       docker build -f docker/react.Dockerfile -t speecher-frontend:pr-${{ github.event.pull_request.number }} .
+  #   
+  #   - name: 🧪 Test Docker Compose configuration
+  #     run: |
+  #       docker compose config
 
   pr-status:
     name: ✅ PR Status Check
-    runs-on: self-hosted
-    needs: [run-tests, code-quality, security-scan, docker-build]
+    runs-on: [self-hosted, containerd]
+    needs: [run-tests, code-quality, security-scan]  # Removed docker-build dependency temporarily
     if: always()
     
     steps:
     - name: 📊 Check all job results
       run: |
-        if [[ "${{ needs.run-tests.result }}" == "failure" || 
-              "${{ needs.docker-build.result }}" == "failure" ]]; then
+        if [[ "${{ needs.run-tests.result }}" == "failure" ]]; then
           echo "❌ Required checks failed!"
           exit 1
         fi

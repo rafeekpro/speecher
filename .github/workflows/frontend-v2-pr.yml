@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   test-and-build:
-    runs-on: self-hosted
+    runs-on: [self-hosted, containerd]
     
     strategy:
       matrix:
@@ -139,7 +139,7 @@ jobs:
           }
 
   security-check:
-    runs-on: self-hosted
+    runs-on: [self-hosted, containerd]
     steps:
     - uses: actions/checkout@v4
     
@@ -156,7 +156,7 @@ jobs:
         head: ${{ github.event.pull_request.head.sha }}
 
   label-pr:
-    runs-on: self-hosted
+    runs-on: [self-hosted, containerd]
     if: github.event_name == 'pull_request'
     steps:
     - uses: actions/labeler@v4
