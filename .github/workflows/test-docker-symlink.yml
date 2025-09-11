@@ -1,0 +1,83 @@
+name: Test Docker Symlink
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/test-docker-symlink.yml'
+
+jobs:
+  test-runner-setup:
+    runs-on: [self-hosted, containerd]
+    name: Test Containerd Runner Configuration
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Test docker command exists
+        run: |
+          echo "=== Testing docker command ==="
+          which docker || echo "docker command not found"
+          docker --version || echo "docker --version failed"
+
+      - name: Test nerdctl command exists
+        run: |
+          echo "=== Testing nerdctl command ==="
+          which nerdctl || echo "nerdctl command not found"
+          nerdctl --version || echo "nerdctl --version failed"
+
+      - name: Check docker symlink
+        run: |
+          echo "=== Checking docker symlink ==="
+          ls -la $(which docker) 2>/dev/null || echo "Cannot check docker symlink"
+          
+      - name: Test container runtime
+        run: |
+          echo "=== Testing container runtime ==="
+          docker run --rm hello-world || echo "docker run failed"
+          
+      - name: Test nerdctl directly
+        run: |
+          echo "=== Testing nerdctl directly ==="
+          nerdctl run --rm hello-world || echo "nerdctl run failed"
+
+      - name: Test kubectl
+        run: |
+          echo "=== Testing kubectl ==="
+          which kubectl || echo "kubectl not found"
+          kubectl version --client || echo "kubectl version failed"
+
+      - name: Show container-related environment
+        run: |
+          echo "=== Container-related environment variables ==="
+          env | grep -i docker || true
+          env | grep -i container || true
+          env | grep -i nerd || true
+          
+      - name: Check containerd service
+        run: |
+          echo "=== Checking containerd service ==="
+          systemctl status containerd || echo "containerd service check failed"
+          
+      - name: Test image pull and list
+        run: |
+          echo "=== Testing image operations ==="
+          docker pull alpine:latest || echo "docker pull failed"
+          docker images || echo "docker images failed"
+          
+      - name: Test basic container operations
+        run: |
+          echo "=== Testing container operations ==="
+          docker run --rm alpine:latest echo "Container test successful" || echo "Container run failed"
+          
+      - name: Summary
+        if: always()
+        run: |
+          echo "=== Test Summary ==="
+          echo "Docker command: $(which docker 2>/dev/null || echo 'NOT FOUND')"
+          echo "Nerdctl command: $(which nerdctl 2>/dev/null || echo 'NOT FOUND')"
+          echo "Kubectl command: $(which kubectl 2>/dev/null || echo 'NOT FOUND')"
+          echo ""
+          echo "If docker commands fail but nerdctl works, the symlink may not be set up."
+          echo "Run setup-containerd-runner.sh on the runner to configure the symlink."

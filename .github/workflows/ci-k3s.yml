@@ -114,20 +114,8 @@ jobs:
     
     - name: Setup nerdctl for K3s
       run: |
-        # Check if nerdctl is available
-        if command -v nerdctl >/dev/null 2>&1; then
-          echo "nerdctl found: $(nerdctl version)"
-        else
-          echo "Installing nerdctl..."
-          # Download and install nerdctl if not present
-          curl -Lo nerdctl.tar.gz https://github.com/containerd/nerdctl/releases/latest/download/nerdctl-full-1.7.1-linux-amd64.tar.gz
-          sudo tar -xzf nerdctl.tar.gz -C /usr/local/
-          rm nerdctl.tar.gz
-        fi
-        
-        # Set containerd namespace for K3s
-        export CONTAINERD_NAMESPACE=k8s.io
-        echo "CONTAINERD_NAMESPACE=k8s.io" >> $GITHUB_ENV
+        chmod +x .github/scripts/setup-nerdctl.sh
+        ./.github/scripts/setup-nerdctl.sh
     
     - name: Build Backend Image with nerdctl
       run: |

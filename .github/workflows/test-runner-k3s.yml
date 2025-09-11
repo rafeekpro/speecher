@@ -81,24 +81,32 @@ jobs:
         echo "Repository contents:"
         ls -la
         
-    - name: Test nerdctl Installation & Usage
+    - name: Setup nerdctl for K3s
       run: |
-        # Install nerdctl if not present
-        if ! command -v nerdctl >/dev/null 2>&1; then
-          echo "Installing nerdctl..."
-          curl -Lo nerdctl.tar.gz https://github.com/containerd/nerdctl/releases/latest/download/nerdctl-full-1.7.1-linux-amd64.tar.gz
-          sudo tar -xzf nerdctl.tar.gz -C /usr/local/
-          rm nerdctl.tar.gz
-        fi
+        chmod +x .github/scripts/setup-nerdctl.sh
+        ./.github/scripts/setup-nerdctl.sh
         
-        # Set containerd namespace for K3s
-        export CONTAINERD_NAMESPACE=k8s.io
+    - name: Test nerdctl Functionality
+      run: |
+        echo "=== Testing nerdctl functionality ==="
         
-        # Test nerdctl commands
-        echo "Testing nerdctl..."
+        # Basic version check
+        echo "nerdctl version:"
         nerdctl version
-        nerdctl info || echo "nerdctl info failed - may need containerd access"
-        nerdctl images || echo "nerdctl images failed - may need containerd access"
+        
+        # Test info command (may fail without full permissions)
+        echo "\nnerdctl info:"
+        nerdctl info || echo "⚠️ nerdctl info failed - may need additional containerd permissions"
+        
+        # Test image listing
+        echo "\nListing images:"
+        nerdctl images || echo "⚠️ nerdctl images failed - may need additional containerd permissions"
+        
+        # Test basic pull (if permissions allow)
+        echo "\nTesting image pull:"
+        nerdctl pull alpine:latest || echo "⚠️ nerdctl pull failed - may need additional permissions"
+        
+        echo "\n✅ nerdctl functionality test completed"
         
     - name: Test Kubernetes Deployment
       run: |
