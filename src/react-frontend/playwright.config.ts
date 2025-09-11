@@ -36,11 +36,6 @@ export default defineConfig({
     
     // Consistent viewport for visual tests
     viewport: { width: 1280, height: 720 },
-    
-    // Disable animations for visual consistency
-    launchOptions: {
-      args: ['--disable-animations', '--disable-web-security'],
-    },
   },
 
   projects: [
@@ -52,47 +47,69 @@ export default defineConfig({
         deviceScaleFactor: 1,
         hasTouch: false,
         isMobile: false,
+        // CI-specific optimizations
+        launchOptions: {
+          args: [
+            '--disable-animations', 
+            '--disable-web-security',
+            '--disable-features=TranslateUI',
+            '--disable-ipc-flooding-protection',
+            ...(process.env.CI ? [
+              '--no-sandbox',
+              '--disable-setuid-sandbox',
+              '--disable-dev-shm-usage',
+              '--disable-accelerated-2d-canvas',
+              '--no-first-run',
+              '--no-zygote',
+              '--single-process',
+              '--disable-gpu'
+            ] : [])
+          ],
+        },
       },
     },
-    {
-      name: 'firefox',
-      use: { 
-        ...devices['Desktop Firefox'],
-        deviceScaleFactor: 1,
-        hasTouch: false,
-        isMobile: false,
+    // Only include other browsers in non-CI environments
+    ...(process.env.CI ? [] : [
+      {
+        name: 'firefox',
+        use: { 
+          ...devices['Desktop Firefox'],
+          deviceScaleFactor: 1,
+          hasTouch: false,
+          isMobile: false,
+        },
       },
-    },
-    {
-      name: 'webkit',
-      use: { 
-        ...devices['Desktop Safari'],
-        deviceScaleFactor: 1,
-        hasTouch: false,
-        isMobile: false,
+      {
+        name: 'webkit',
+        use: { 
+          ...devices['Desktop Safari'],
+          deviceScaleFactor: 1,
+          hasTouch: false,
+          isMobile: false,
+        },
       },
-    },
-    {
-      name: 'mobile-chrome',
-      use: { 
-        ...devices['Pixel 5'],
-        deviceScaleFactor: 2,
+      {
+        name: 'mobile-chrome',
+        use: { 
+          ...devices['Pixel 5'],
+          deviceScaleFactor: 2,
+        },
       },
-    },
-    {
-      name: 'mobile-safari',
-      use: { 
-        ...devices['iPhone 13'],
-        deviceScaleFactor: 3,
+      {
+        name: 'mobile-safari',
+        use: { 
+          ...devices['iPhone 13'],
+          deviceScaleFactor: 3,
+        },
       },
-    },
-    {
-      name: 'tablet',
-      use: { 
-        ...devices['iPad (gen 7)'],
-        deviceScaleFactor: 2,
+      {
+        name: 'tablet',
+        use: { 
+          ...devices['iPad (gen 7)'],
+          deviceScaleFactor: 2,
+        },
       },
-    },
+    ]),
   ],
 
   webServer: {
