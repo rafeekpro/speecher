@@ -175,14 +175,11 @@ jobs:
       run: |
         echo "🏗️ Building frontend container with Kaniko for PR ${{ github.event.pull_request.number }}..."
         
-        # Create build namespace
-        kubectl create namespace frontend-build-${{ github.event.pull_request.number }} || true
-        
-        # Create build context ConfigMap
+        # Use github-runner namespace with unique ConfigMap name
         echo "📦 Preparing build context..."
-        kubectl create configmap frontend-build-context \
+        kubectl create configmap frontend-build-context-pr-${{ github.event.pull_request.number }} \
           --from-file=. \
-          --namespace=frontend-build-${{ github.event.pull_request.number }} \
+          --namespace=github-runner \
           --dry-run=client -o yaml | kubectl apply -f -
         
         # Check for existing Dockerfiles and build accordingly
@@ -204,9 +201,9 @@ jobs:
           EOF
           
           # Add the temporary Dockerfile to build context
-          kubectl create configmap temp-dockerfile \
+          kubectl create configmap temp-dockerfile-pr-${{ github.event.pull_request.number }} \
             --from-file=Dockerfile=/tmp/frontend.Dockerfile \
-            --namespace=frontend-build-${{ github.event.pull_request.number }} \
+            --namespace=github-runner \
             --dry-run=client -o yaml | kubectl apply -f -
           
           DOCKERFILE_PATH="/workspace/Dockerfile"
@@ -219,8 +216,10 @@ jobs:
         apiVersion: batch/v1
         kind: Job
         metadata:
-          name: frontend-build
-          namespace: frontend-build-${{ github.event.pull_request.number }}
+          name: frontend-build-pr-${{ github.event.pull_request.number }}
+          namespace: github-runner
+          labels:
+            pr-number: "${{ github.event.pull_request.number }}"
         spec:
           template:
             spec:
@@ -250,10 +249,10 @@ jobs:
               volumes:
               - name: build-context
                 configMap:
-                  name: frontend-build-context
+                  name: frontend-build-context-pr-${{ github.event.pull_request.number }}
               - name: temp-dockerfile
                 configMap:
-                  name: temp-dockerfile
+                  name: temp-dockerfile-pr-${{ github.event.pull_request.number }}
         EOF
         else
           # Use existing Dockerfile - deploy job with only build context
@@ -261,8 +260,10 @@ jobs:
         apiVersion: batch/v1
         kind: Job
         metadata:
-          name: frontend-build
-          namespace: frontend-build-${{ github.event.pull_request.number }}
+          name: frontend-build-pr-${{ github.event.pull_request.number }}
+          namespace: github-runner
+          labels:
+            pr-number: "${{ github.event.pull_request.number }}"
         spec:
           template:
             spec:
@@ -289,14 +290,14 @@ jobs:
               volumes:
               - name: build-context
                 configMap:
-                  name: frontend-build-context
+                  name: frontend-build-context-pr-${{ github.event.pull_request.number }}
         EOF
         fi
         
         echo "⏳ Waiting for frontend build to complete..."
-        kubectl wait --for=condition=complete job/frontend-build --timeout=600s --namespace=frontend-build-${{ github.event.pull_request.number }} || {
+        kubectl wait --for=condition=complete job/frontend-build-pr-${{ github.event.pull_request.number }} --timeout=600s --namespace=github-runner || {
           echo "❌ Frontend build failed"
-          kubectl logs job/frontend-build --namespace=frontend-build-${{ github.event.pull_request.number }} --tail=50
+          kubectl logs job/frontend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --tail=50
           echo "⚠️ Frontend build failed (may be expected if no build artifacts)"
         }
         
@@ -362,8 +363,9 @@ jobs:
         fi
         
         # Cleanup test resources
-        kubectl delete namespace frontend-test-${{ github.event.pull_request.number }} --grace-period=30 &
-        kubectl delete namespace frontend-build-${{ github.event.pull_request.number }} --grace-period=30 &
+        kubectl delete pod frontend-test-pr-${{ github.event.pull_request.number }} --namespace=github-runner --grace-period=30 || true
+        kubectl delete job frontend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --grace-period=30 || true
+        kubectl delete configmap frontend-build-context-pr-${{ github.event.pull_request.number }} temp-dockerfile-pr-${{ github.event.pull_request.number }} --namespace=github-runner --grace-period=30 || true
         
         echo "🧹 Frontend container test and cleanup initiated"
 

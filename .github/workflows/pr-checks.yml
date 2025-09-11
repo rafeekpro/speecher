@@ -272,14 +272,11 @@ jobs:
       run: |
         echo "🏗️ Building backend image with Kaniko for PR ${{ github.event.pull_request.number }}..."
         
-        # Create build namespace
-        kubectl create namespace pr-build-${{ github.event.pull_request.number }} || true
-        
-        # Create build context ConfigMap
+        # Use github-runner namespace with unique ConfigMap name
         echo "📦 Preparing build context..."
-        kubectl create configmap backend-build-context \
+        kubectl create configmap backend-build-context-pr-${{ github.event.pull_request.number }} \
           --from-file=. \
-          --namespace=pr-build-${{ github.event.pull_request.number }} \
+          --namespace=github-runner \
           --dry-run=client -o yaml | kubectl apply -f -
         
         # Backend build job with Kaniko
@@ -287,8 +284,10 @@ jobs:
         apiVersion: batch/v1
         kind: Job
         metadata:
-          name: backend-build
-          namespace: pr-build-${{ github.event.pull_request.number }}
+          name: backend-build-pr-${{ github.event.pull_request.number }}
+          namespace: github-runner
+          labels:
+            pr-number: "${{ github.event.pull_request.number }}"
         spec:
           template:
             spec:
@@ -315,15 +314,17 @@ jobs:
               volumes:
               - name: build-context
                 configMap:
-                  name: backend-build-context
+                  name: backend-build-context-pr-${{ github.event.pull_request.number }}
         EOF
         
         echo "⏳ Waiting for backend build to complete..."
-        kubectl wait --for=condition=complete job/backend-build \
+        kubectl wait --for=condition=complete job/backend-build-pr-${{ github.event.pull_request.number }} \
           --timeout=600s \
-          --namespace=pr-build-${{ github.event.pull_request.number }} || {
+          --namespace=github-runner || {
           echo "❌ Backend build failed"
-          kubectl logs job/backend-build --namespace=pr-build-${{ github.event.pull_request.number }} --tail=50
+          kubectl logs job/backend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --tail=50
+          kubectl delete job backend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
+          kubectl delete configmap backend-build-context-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
           exit 1
         }
         
@@ -334,13 +335,22 @@ jobs:
         echo "🏗️ Building frontend image with Kaniko..."
         
         if [ -f "docker/react.Dockerfile" ]; then
-          # Frontend build job
+          # Create frontend build context ConfigMap
+          echo "📦 Preparing frontend build context..."
+          kubectl create configmap frontend-build-context-pr-${{ github.event.pull_request.number }} \
+            --from-file=. \
+            --namespace=github-runner \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Frontend build job with unique name
           cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
         metadata:
-          name: frontend-build
-          namespace: pr-build-${{ github.event.pull_request.number }}
+          name: frontend-build-pr-${{ github.event.pull_request.number }}
+          namespace: github-runner
+          labels:
+            pr-number: "${{ github.event.pull_request.number }}"
         spec:
           template:
             spec:
@@ -367,15 +377,15 @@ jobs:
               volumes:
               - name: build-context
                 configMap:
-                  name: backend-build-context
+                  name: frontend-build-context-pr-${{ github.event.pull_request.number }}
         EOF
           
           echo "⏳ Waiting for frontend build to complete..."
-          kubectl wait --for=condition=complete job/frontend-build \
+          kubectl wait --for=condition=complete job/frontend-build-pr-${{ github.event.pull_request.number }} \
             --timeout=600s \
-            --namespace=pr-build-${{ github.event.pull_request.number }} || {
+            --namespace=github-runner || {
             echo "❌ Frontend build failed"
-            kubectl logs job/frontend-build --namespace=pr-build-${{ github.event.pull_request.number }} --tail=50
+            kubectl logs job/frontend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --tail=50
             echo "⚠️ Frontend build failed, continuing..."
           }
           
@@ -388,17 +398,16 @@ jobs:
       run: |
         echo "🧪 Testing Kaniko-built containers..."
         
-        # Create test namespace
-        kubectl create namespace pr-test-${{ github.event.pull_request.number }} || true
-        
-        # Test backend container functionality
+        # Test backend container functionality in github-runner namespace
         echo "🔍 Testing backend container startup..."
         cat <<EOF | kubectl apply -f -
         apiVersion: v1
         kind: Pod
         metadata:
-          name: backend-test
-          namespace: pr-test-${{ github.event.pull_request.number }}
+          name: backend-test-pr-${{ github.event.pull_request.number }}
+          namespace: github-runner
+          labels:
+            pr-number: "${{ github.event.pull_request.number }}"
         spec:
           restartPolicy: Never
           containers:
@@ -417,21 +426,22 @@ jobs:
         
         # Wait for test to complete
         echo "⏳ Waiting for container test to complete..."
-        kubectl wait --for=condition=ready pod/backend-test \
+        kubectl wait --for=condition=ready pod/backend-test-pr-${{ github.event.pull_request.number }} \
           --timeout=60s \
-          --namespace=pr-test-${{ github.event.pull_request.number }} || {
+          --namespace=github-runner || {
           echo "⚠️ Backend container test failed, checking logs..."
-          kubectl logs backend-test --namespace=pr-test-${{ github.event.pull_request.number }} --tail=20 || true
-          kubectl describe pod backend-test --namespace=pr-test-${{ github.event.pull_request.number }} || true
+          kubectl logs backend-test-pr-${{ github.event.pull_request.number }} --namespace=github-runner --tail=20 || true
+          kubectl describe pod backend-test-pr-${{ github.event.pull_request.number }} --namespace=github-runner || true
         }
         
         # Check final pod status
-        POD_STATUS=$(kubectl get pod backend-test --namespace=pr-test-${{ github.event.pull_request.number }} -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+        POD_STATUS=$(kubectl get pod backend-test-pr-${{ github.event.pull_request.number }} --namespace=github-runner -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
         echo "📋 Backend container test status: $POD_STATUS"
         
         # Cleanup test resources
-        kubectl delete namespace pr-test-${{ github.event.pull_request.number }} --grace-period=30 &
-        kubectl delete namespace pr-build-${{ github.event.pull_request.number }} --grace-period=30 &
+        kubectl delete pod backend-test-pr-${{ github.event.pull_request.number }} --namespace=github-runner --grace-period=30 || true
+        kubectl delete job backend-build-pr-${{ github.event.pull_request.number }} frontend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --grace-period=30 || true
+        kubectl delete configmap backend-build-context-pr-${{ github.event.pull_request.number }} frontend-build-context-pr-${{ github.event.pull_request.number }} --namespace=github-runner --grace-period=30 || true
         
         echo "✅ Container build and test completed"
 

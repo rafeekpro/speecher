@@ -9,7 +9,8 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
-  NAMESPACE: 'speecher-ci'
+  # Use existing github-runner namespace
+  NAMESPACE: 'github-runner'
   
 jobs:
   test:
@@ -28,15 +29,16 @@ jobs:
     
     - name: Deploy MongoDB for tests
       run: |
-        kubectl create namespace test-${{ github.run_id }} --dry-run=client -o yaml | kubectl apply -f -
-        kubectl run mongodb --image=mongo:6.0 --port=27017 \
-          --namespace=test-${{ github.run_id }} \
+        # Use github-runner namespace with unique pod name
+        kubectl run mongodb-${{ github.run_id }} --image=mongo:6.0 --port=27017 \
+          --namespace=github-runner \
           --env="MONGO_INITDB_ROOT_USERNAME=" \
-          --env="MONGO_INITDB_ROOT_PASSWORD="
-        kubectl expose pod mongodb --port=27017 --namespace=test-${{ github.run_id }}
-        kubectl wait --for=condition=ready pod/mongodb --namespace=test-${{ github.run_id }} --timeout=60s
+          --env="MONGO_INITDB_ROOT_PASSWORD=" \
+          --labels="test-run=${{ github.run_id }}"
+        kubectl expose pod mongodb-${{ github.run_id }} --port=27017 --namespace=github-runner --name=mongodb-svc-${{ github.run_id }}
+        kubectl wait --for=condition=ready pod/mongodb-${{ github.run_id }} --namespace=github-runner --timeout=60s
         # Port forward to make MongoDB accessible locally
-        kubectl port-forward -n test-${{ github.run_id }} pod/mongodb 27017:27017 &
+        kubectl port-forward -n github-runner pod/mongodb-${{ github.run_id }} 27017:27017 &
         sleep 5
     
     - name: Set up Python
@@ -81,10 +83,12 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: false
     
-    - name: Cleanup test namespace
+    - name: Cleanup test resources
       if: always()
       run: |
-        kubectl delete namespace test-${{ github.run_id }} --wait=false || true
+        # Cleanup resources in github-runner namespace
+        kubectl delete pod mongodb-${{ github.run_id }} --namespace=github-runner --wait=false || true
+        kubectl delete service mongodb-svc-${{ github.run_id }} --namespace=github-runner --wait=false || true
 
   lint:
     name: Lint Code
@@ -130,27 +134,26 @@ jobs:
       run: |
         echo "🏗️ Setting up Kubernetes build environment for K3s..."
         
-        # Create build namespace
-        kubectl create namespace k3s-build-${{ github.run_id }} || true
-        
-        # Create build context ConfigMap
+        # Use github-runner namespace, create unique ConfigMap
         echo "📦 Creating build context from current directory..."
-        kubectl create configmap build-context \
+        kubectl create configmap build-context-${{ github.run_id }} \
           --from-file=. \
-          --namespace=k3s-build-${{ github.run_id }} \
+          --namespace=github-runner \
           --dry-run=client -o yaml | kubectl apply -f -
     
     - name: Build Backend Image with Kaniko
       run: |
         echo "🏗️ Building backend image with Kaniko for K3s..."
         
-        # Backend build job
+        # Backend build job with unique name
         cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
         metadata:
-          name: backend-build
-          namespace: k3s-build-${{ github.run_id }}
+          name: backend-build-${{ github.run_id }}
+          namespace: github-runner
+          labels:
+            test-run: "${{ github.run_id }}"
         spec:
           template:
             spec:
@@ -177,15 +180,15 @@ jobs:
               volumes:
               - name: build-context
                 configMap:
-                  name: build-context
+                  name: build-context-${{ github.run_id }}
         EOF
         
         echo "⏳ Waiting for backend build to complete..."
-        kubectl wait --for=condition=complete job/backend-build \
+        kubectl wait --for=condition=complete job/backend-build-${{ github.run_id }} \
           --timeout=600s \
-          --namespace=k3s-build-${{ github.run_id }} || {
+          --namespace=github-runner || {
           echo "❌ Backend build failed"
-          kubectl logs job/backend-build --namespace=k3s-build-${{ github.run_id }} --tail=50
+          kubectl logs job/backend-build-${{ github.run_id }} --namespace=github-runner --tail=50
           exit 1
         }
         
@@ -196,13 +199,15 @@ jobs:
         echo "🏗️ Building frontend image with Kaniko..."
         
         if [ -f "docker/react.Dockerfile" ]; then
-          # Frontend build job
+          # Frontend build job with unique name
           cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
         metadata:
-          name: frontend-build
-          namespace: k3s-build-${{ github.run_id }}
+          name: frontend-build-${{ github.run_id }}
+          namespace: github-runner
+          labels:
+            test-run: "${{ github.run_id }}"
         spec:
           template:
             spec:
@@ -229,15 +234,15 @@ jobs:
               volumes:
               - name: build-context
                 configMap:
-                  name: build-context
+                  name: build-context-${{ github.run_id }}
         EOF
           
           echo "⏳ Waiting for frontend build to complete..."
-          kubectl wait --for=condition=complete job/frontend-build \
+          kubectl wait --for=condition=complete job/frontend-build-${{ github.run_id }} \
             --timeout=600s \
-            --namespace=k3s-build-${{ github.run_id }} || {
+            --namespace=github-runner || {
             echo "❌ Frontend build failed"
-            kubectl logs job/frontend-build --namespace=k3s-build-${{ github.run_id }} --tail=50
+            kubectl logs job/frontend-build-${{ github.run_id }} --namespace=github-runner --tail=50
             echo "⚠️ Continuing despite frontend build failure..."
           }
         else
@@ -250,16 +255,17 @@ jobs:
       run: |
         echo "🧪 Testing built containers with full K3s integration..."
         
-        # Create test namespace
-        kubectl create namespace integration-test-${{ github.run_id }} || true
+        # Use github-runner namespace for integration test
         
         # Deploy test stack using Kubernetes with Kaniko-built images
         cat << EOF | kubectl apply -f -
         apiVersion: v1
         kind: ConfigMap
         metadata:
-          name: test-config
-          namespace: integration-test-${{ github.run_id }}
+          name: test-config-${{ github.run_id }}
+          namespace: github-runner
+          labels:
+            test-run: "${{ github.run_id }}"
         data:
           MONGODB_URI: "mongodb://mongodb:27017"
           ENVIRONMENT: "test"
@@ -267,17 +273,21 @@ jobs:
         apiVersion: apps/v1
         kind: Deployment
         metadata:
-          name: mongodb
-          namespace: integration-test-${{ github.run_id }}
+          name: mongodb-deploy-${{ github.run_id }}
+          namespace: github-runner
+          labels:
+            test-run: "${{ github.run_id }}"
         spec:
           replicas: 1
           selector:
             matchLabels:
               app: mongodb
+              test-run: "${{ github.run_id }}"
           template:
             metadata:
               labels:
                 app: mongodb
+                test-run: "${{ github.run_id }}"
             spec:
               containers:
               - name: mongodb
@@ -300,29 +310,36 @@ jobs:
         apiVersion: v1
         kind: Service
         metadata:
-          name: mongodb
-          namespace: integration-test-${{ github.run_id }}
+          name: mongodb-service-${{ github.run_id }}
+          namespace: github-runner
+          labels:
+            test-run: "${{ github.run_id }}"
         spec:
           ports:
           - port: 27017
             targetPort: 27017
           selector:
             app: mongodb
+            test-run: "${{ github.run_id }}"
         ---
         apiVersion: apps/v1
         kind: Deployment
         metadata:
-          name: backend
-          namespace: integration-test-${{ github.run_id }}
+          name: backend-deploy-${{ github.run_id }}
+          namespace: github-runner
+          labels:
+            test-run: "${{ github.run_id }}"
         spec:
           replicas: 1
           selector:
             matchLabels:
               app: backend
+              test-run: "${{ github.run_id }}"
           template:
             metadata:
               labels:
                 app: backend
+                test-run: "${{ github.run_id }}"
             spec:
               containers:
               - name: backend
@@ -332,7 +349,7 @@ jobs:
                 - containerPort: 8000
                 envFrom:
                 - configMapRef:
-                    name: test-config
+                    name: test-config-${{ github.run_id }}
                 resources:
                   requests:
                     memory: "256Mi"
@@ -344,8 +361,10 @@ jobs:
         apiVersion: v1
         kind: Service
         metadata:
-          name: backend
-          namespace: integration-test-${{ github.run_id }}
+          name: backend-service-${{ github.run_id }}
+          namespace: github-runner
+          labels:
+            test-run: "${{ github.run_id }}"
         spec:
           type: ClusterIP
           ports:
@@ -353,43 +372,46 @@ jobs:
             targetPort: 8000
           selector:
             app: backend
+            test-run: "${{ github.run_id }}"
         EOF
         
         # Wait for deployments
         echo "⏳ Waiting for MongoDB deployment..."
-        kubectl wait --for=condition=available --timeout=120s deployment/mongodb \
-          -n integration-test-${{ github.run_id }} || {
+        kubectl wait --for=condition=available --timeout=120s deployment/mongodb-deploy-${{ github.run_id }} \
+          -n github-runner || {
           echo "⚠️ MongoDB deployment failed"
-          kubectl get pods -n integration-test-${{ github.run_id }}
-          kubectl logs deployment/mongodb -n integration-test-${{ github.run_id }} --tail=20 || true
+          kubectl get pods -n github-runner -l test-run=${{ github.run_id }}
+          kubectl logs deployment/mongodb-deploy-${{ github.run_id }} -n github-runner --tail=20 || true
         }
         
         echo "⏳ Waiting for backend deployment..."
-        kubectl wait --for=condition=available --timeout=120s deployment/backend \
-          -n integration-test-${{ github.run_id }} || {
+        kubectl wait --for=condition=available --timeout=120s deployment/backend-deploy-${{ github.run_id }} \
+          -n github-runner || {
           echo "⚠️ Backend deployment failed"
-          kubectl get pods -n integration-test-${{ github.run_id }}
-          kubectl logs deployment/backend -n integration-test-${{ github.run_id }} --tail=20 || true
+          kubectl get pods -n github-runner -l test-run=${{ github.run_id }}
+          kubectl logs deployment/backend-deploy-${{ github.run_id }} -n github-runner --tail=20 || true
         }
         
         # Health check using pod-to-pod communication
         echo "🔍 Testing backend health via pod exec..."
-        BACKEND_POD=$(kubectl get pods -n integration-test-${{ github.run_id }} -l app=backend -o jsonpath='{.items[0].metadata.name}')
+        BACKEND_POD=$(kubectl get pods -n github-runner -l app=backend,test-run=${{ github.run_id }} -o jsonpath='{.items[0].metadata.name}')
         
         if [ -n "$BACKEND_POD" ]; then
-          kubectl exec $BACKEND_POD -n integration-test-${{ github.run_id }} \
+          kubectl exec $BACKEND_POD -n github-runner \
             -- curl -f http://localhost:8000/health || echo "⚠️ Health check failed (may be expected)"
         else
           echo "⚠️ Backend pod not found"
         fi
         
         echo "📋 Final status:"
-        kubectl get pods -n integration-test-${{ github.run_id }}
+        kubectl get pods -n github-runner -l test-run=${{ github.run_id }}
         
         # Cleanup
         echo "🧹 Cleaning up test resources..."
-        kubectl delete namespace integration-test-${{ github.run_id }} --grace-period=30 &
-        kubectl delete namespace k3s-build-${{ github.run_id }} --grace-period=30 &
+        kubectl delete deployment mongodb-deploy-${{ github.run_id }} backend-deploy-${{ github.run_id }} -n github-runner --grace-period=30 || true
+        kubectl delete service mongodb-service-${{ github.run_id }} backend-service-${{ github.run_id }} -n github-runner --grace-period=30 || true
+        kubectl delete configmap test-config-${{ github.run_id }} build-context-${{ github.run_id }} -n github-runner --grace-period=30 || true
+        kubectl delete job backend-build-${{ github.run_id }} frontend-build-${{ github.run_id }} -n github-runner --grace-period=30 || true
         
         echo "✅ Integration test completed"
 
@@ -424,16 +446,15 @@ jobs:
       run: |
         echo "🔒 Running container security scan with Trivy in K3s..."
         
-        # Create security scan namespace
-        kubectl create namespace security-scan-${{ github.run_id }} || true
-        
-        # Run Trivy scan as a Kubernetes job
+        # Run Trivy scan as a Kubernetes job in github-runner namespace
         cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
         metadata:
-          name: trivy-scan
-          namespace: security-scan-${{ github.run_id }}
+          name: trivy-scan-${{ github.run_id }}
+          namespace: github-runner
+          labels:
+            test-run: "${{ github.run_id }}"
         spec:
           template:
             spec:
@@ -466,21 +487,21 @@ jobs:
         
         # Wait for scan to complete
         echo "⏳ Waiting for security scan to complete..."
-        kubectl wait --for=condition=complete job/trivy-scan \
+        kubectl wait --for=condition=complete job/trivy-scan-${{ github.run_id }} \
           --timeout=300s \
-          --namespace=security-scan-${{ github.run_id }} || {
+          --namespace=github-runner || {
           echo "⚠️ Security scan timed out or failed"
-          kubectl logs job/trivy-scan --namespace=security-scan-${{ github.run_id }} --tail=20 || true
+          kubectl logs job/trivy-scan-${{ github.run_id }} --namespace=github-runner --tail=20 || true
         }
         
         # Extract scan results
-        TRIVY_POD=$(kubectl get pods -n security-scan-${{ github.run_id }} -l job-name=trivy-scan -o jsonpath='{.items[0].metadata.name}')
+        TRIVY_POD=$(kubectl get pods -n github-runner -l job-name=trivy-scan-${{ github.run_id }} -o jsonpath='{.items[0].metadata.name}')
         if [ -n "$TRIVY_POD" ]; then
-          kubectl cp security-scan-${{ github.run_id }}/$TRIVY_POD:/tmp/trivy-report.json trivy-report.json || echo "⚠️ Could not extract scan results"
+          kubectl cp github-runner/$TRIVY_POD:/tmp/trivy-report.json trivy-report.json || echo "⚠️ Could not extract scan results"
         fi
         
-        # Cleanup scan namespace
-        kubectl delete namespace security-scan-${{ github.run_id }} --grace-period=30 &
+        # Cleanup scan job
+        kubectl delete job trivy-scan-${{ github.run_id }} --namespace=github-runner --grace-period=30 || true
         
         echo "✅ Security scan completed"
       continue-on-error: true

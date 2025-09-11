@@ -9,8 +9,9 @@ on:
 
 env:
   PYTHON_VERSION: '3.11'
-  # Use github-runner namespace which should have proper permissions
+  # Use github-runner namespace (existing namespace)
   KUBE_NAMESPACE: 'github-runner'
+  # Add run ID to resource names for uniqueness
   MONGODB_POD: 'mongodb-${{ github.run_id }}'
   MONGODB_PORT: '27017'
   # Container image settings
