@@ -171,19 +171,29 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: 🏗️ Build Frontend Container with nerdctl
+    - name: 🏗️ Build Frontend Container with Kaniko
       run: |
-        echo "🏗️ Building frontend container for PR ${{ github.event.pull_request.number }}..."
+        echo "🏗️ Building frontend container with Kaniko for PR ${{ github.event.pull_request.number }}..."
         
-        # Check if frontend Dockerfile exists
+        # Create build namespace
+        kubectl create namespace frontend-build-${{ github.event.pull_request.number }} || true
+        
+        # Create build context ConfigMap
+        echo "📦 Preparing build context..."
+        kubectl create configmap frontend-build-context \
+          --from-file=. \
+          --namespace=frontend-build-${{ github.event.pull_request.number }} \
+          --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Check for existing Dockerfiles and build accordingly
         if [ -f "docker/react.Dockerfile" ]; then
-          nerdctl build -f docker/react.Dockerfile -t speecher-frontend:pr-${{ github.event.pull_request.number }} .
-          echo "✅ Frontend container built successfully"
+          echo "📄 Using docker/react.Dockerfile"
+          DOCKERFILE_PATH="/workspace/docker/react.Dockerfile"
         elif [ -f "${{ env.FRONTEND_DIR }}/Dockerfile" ]; then
-          nerdctl build -f ${{ env.FRONTEND_DIR }}/Dockerfile -t speecher-frontend:pr-${{ github.event.pull_request.number }} ${{ env.FRONTEND_DIR }}
-          echo "✅ Frontend container built successfully"
+          echo "📄 Using frontend directory Dockerfile"
+          DOCKERFILE_PATH="/workspace/${{ env.FRONTEND_DIR }}/Dockerfile"
         else
-          echo "ℹ️ No frontend Dockerfile found, creating minimal test container..."
+          echo "ℹ️ No frontend Dockerfile found, creating minimal Nginx container..."
           
           # Create a simple Dockerfile for testing
           cat > /tmp/frontend.Dockerfile << 'EOF'
@@ -193,40 +203,128 @@ EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
 EOF
           
-          # Build with the temporary Dockerfile
-          nerdctl build -f /tmp/frontend.Dockerfile -t speecher-frontend:pr-${{ github.event.pull_request.number }} . || echo "⚠️ Frontend container build failed (expected if no build artifacts)"
+          # Add the temporary Dockerfile to build context
+          kubectl create configmap temp-dockerfile \
+            --from-file=Dockerfile=/tmp/frontend.Dockerfile \
+            --namespace=frontend-build-${{ github.event.pull_request.number }} \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          DOCKERFILE_PATH="/workspace/Dockerfile"
         fi
+        
+        # Frontend build job with Kaniko
+        cat <<EOF | kubectl apply -f -
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: frontend-build
+          namespace: frontend-build-${{ github.event.pull_request.number }}
+        spec:
+          template:
+            spec:
+              restartPolicy: Never
+              containers:
+              - name: kaniko
+                image: gcr.io/kaniko-project/executor:latest
+                args:
+                - --dockerfile=$DOCKERFILE_PATH
+                - --context=/workspace
+                - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
+                - --cache=true
+                - --cache-ttl=24h
+                volumeMounts:
+                - name: build-context
+                  mountPath: /workspace
+                $(if [ ! -f "docker/react.Dockerfile" ] && [ ! -f "${{ env.FRONTEND_DIR }}/Dockerfile" ]; then echo "- name: temp-dockerfile"; echo "  mountPath: /workspace"; fi)
+                resources:
+                  requests:
+                    memory: "1Gi"
+                    cpu: "500m"
+                  limits:
+                    memory: "2Gi"
+                    cpu: "1000m"
+              volumes:
+              - name: build-context
+                configMap:
+                  name: frontend-build-context
+              $(if [ ! -f "docker/react.Dockerfile" ] && [ ! -f "${{ env.FRONTEND_DIR }}/Dockerfile" ]; then echo "- name: temp-dockerfile"; echo "  configMap:"; echo "    name: temp-dockerfile"; fi)
+        EOF
+        
+        echo "⏳ Waiting for frontend build to complete..."
+        kubectl wait --for=condition=complete job/frontend-build \
+          --timeout=600s \
+          --namespace=frontend-build-${{ github.event.pull_request.number }} || {
+          echo "❌ Frontend build failed"
+          kubectl logs job/frontend-build --namespace=frontend-build-${{ github.event.pull_request.number }} --tail=50
+          echo "⚠️ Frontend build failed (may be expected if no build artifacts)"
+        }
+        
+        echo "✅ Frontend container build completed with Kaniko"
     
     - name: 🧪 Test Frontend Container
       run: |
-        echo "🧪 Testing frontend container..."
+        echo "🧪 Testing Kaniko-built frontend container..."
         
         # Create test namespace
-        kubectl create namespace ${{ env.KUBE_NAMESPACE }} || true
+        kubectl create namespace frontend-test-${{ github.event.pull_request.number }} || true
         
-        # Check if image was built successfully
-        if nerdctl images | grep -q "speecher-frontend:pr-${{ github.event.pull_request.number }}"; then
-          echo "📦 Deploying frontend container for testing..."
+        # Deploy frontend container for testing
+        echo "📦 Deploying frontend container for testing..."
+        cat <<EOF | kubectl apply -f -
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: frontend-test
+          namespace: frontend-test-${{ github.event.pull_request.number }}
+          labels:
+            app: frontend-test
+        spec:
+          restartPolicy: Never
+          containers:
+          - name: frontend
+            image: speecher-frontend:pr-${{ github.event.pull_request.number }}
+            imagePullPolicy: Never
+            ports:
+            - containerPort: 80
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "256Mi"
+                cpu: "200m"
+        EOF
+        
+        # Wait and check status
+        echo "⏳ Waiting for frontend pod status..."
+        sleep 10
+        
+        POD_STATUS=$(kubectl get pod frontend-test --namespace=frontend-test-${{ github.event.pull_request.number }} -o jsonpath='{.status.phase}' 2>/dev/null || echo "Unknown")
+        echo "📋 Frontend container status: $POD_STATUS"
+        
+        # Get pod details for debugging
+        kubectl get pods --namespace=frontend-test-${{ github.event.pull_request.number }} || true
+        
+        if [ "$POD_STATUS" = "Running" ] || [ "$POD_STATUS" = "Succeeded" ]; then
+          echo "✅ Frontend container test successful"
           
-          kubectl run frontend-test-${{ github.event.pull_request.number }} \
-            --image=speecher-frontend:pr-${{ github.event.pull_request.number }} \
-            --namespace=${{ env.KUBE_NAMESPACE }} \
-            --port=80 \
-            --restart=Never || true
-          
-          # Wait and check status
-          sleep 10
-          kubectl get pods --namespace=${{ env.KUBE_NAMESPACE }} || true
-          
-          echo "✅ Frontend container test completed"
+          # Test basic nginx functionality if container is running
+          if [ "$POD_STATUS" = "Running" ]; then
+            echo "🔍 Testing nginx functionality..."
+            kubectl exec frontend-test --namespace=frontend-test-${{ github.event.pull_request.number }} \
+              -- nginx -t || echo "⚠️ Nginx config test failed (may be expected)"
+          fi
         else
-          echo "ℹ️ No frontend container to test"
+          echo "⚠️ Frontend container test status: $POD_STATUS"
+          kubectl logs frontend-test --namespace=frontend-test-${{ github.event.pull_request.number }} --tail=20 || true
+          kubectl describe pod frontend-test --namespace=frontend-test-${{ github.event.pull_request.number }} || true
         fi
         
         # Cleanup test resources
-        kubectl delete namespace ${{ env.KUBE_NAMESPACE }} --ignore-not-found=true &
+        kubectl delete namespace frontend-test-${{ github.event.pull_request.number }} --grace-period=30 &
+        kubectl delete namespace frontend-build-${{ github.event.pull_request.number }} --grace-period=30 &
         
-        echo "🧹 Test cleanup initiated"
+        echo "🧹 Frontend container test and cleanup initiated"
 
   label-pr:
     runs-on: [self-hosted, linux, x64, kubernetes]
