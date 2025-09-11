@@ -146,7 +146,7 @@ jobs:
           }
 
   security-check:
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     steps:
     - uses: actions/checkout@v4
     
@@ -164,7 +164,7 @@ jobs:
 
   container-build:
     name: 🐳 Frontend Container Build
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     needs: [test-and-build]
     if: success()  # Only run if tests pass
     
@@ -229,7 +229,7 @@ EOF
         echo "🧹 Test cleanup initiated"
 
   label-pr:
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     if: github.event_name == 'pull_request'
     steps:
     - uses: actions/labeler@v4

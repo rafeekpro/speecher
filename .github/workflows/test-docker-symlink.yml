@@ -8,7 +8,7 @@ on:
 
 jobs:
   test-runner-setup:
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     name: Test Containerd Runner Configuration
     
     steps:

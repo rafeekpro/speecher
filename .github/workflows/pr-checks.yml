@@ -23,7 +23,7 @@ concurrency:
 jobs:
   changes:
     name: Detect Changes
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -58,7 +58,7 @@ jobs:
 
   run-tests:
     name: 🧪 Run All Tests
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     needs: changes
     # Run tests if backend/tests changed OR if path detection failed (fail-safe)
     if: |
@@ -170,7 +170,7 @@ jobs:
 
   code-quality:
     name: 🎨 Code Quality
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     needs: changes
     # Run if backend/frontend changed OR if path detection failed
     if: |
@@ -217,7 +217,7 @@ jobs:
 
   security-scan:
     name: 🔒 Security Scan
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     
     steps:
     - name: 📥 Checkout code
@@ -248,7 +248,7 @@ jobs:
 
   container-build:
     name: 🐳 Container Build Test (nerdctl)
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     needs: changes
     # Run if backend/frontend changed OR if path detection failed
     if: |
@@ -294,7 +294,7 @@ jobs:
 
   pr-status:
     name: ✅ PR Status Check
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     needs: [run-tests, code-quality, security-scan, container-build]  # Added container-build back
     if: always()
     

@@ -8,7 +8,7 @@ on:
 jobs:
   test-runner:
     name: Test Containerd Runner Connection
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     
     steps:
     - name: Check runner info

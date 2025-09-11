@@ -8,7 +8,7 @@ on:
 jobs:
   test-nerdctl:
     name: Test nerdctl Containerd Compatibility
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     
     steps:
     - name: Check nerdctl installation

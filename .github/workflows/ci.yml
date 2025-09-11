@@ -21,7 +21,7 @@ jobs:
   # Optimized containerized test job - builds and runs tests in container
   test-optimized:
     name: 🚀 Optimized Container Tests
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     
     steps:
     - uses: actions/checkout@v4
@@ -328,7 +328,7 @@ jobs:
   # Kept for compatibility and as a fallback path while test-optimized stabilizes
   test:
     name: Run Tests
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     
     # Using Kubernetes-native service deployment instead of Docker services
     # This approach works with containerd runners that don't have Docker daemon
@@ -519,7 +519,7 @@ jobs:
 
   lint:
     name: Lint Code
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     
     steps:
     - uses: actions/checkout@v4
@@ -553,7 +553,7 @@ jobs:
   # Container build using nerdctl (containerd-native)
   container-build:
     name: 🐳 Build Container Images
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     
     steps:
     - uses: actions/checkout@v4
@@ -651,7 +651,7 @@ jobs:
 
   security:
     name: Security Scan
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     
     steps:
     - uses: actions/checkout@v4
@@ -687,7 +687,7 @@ jobs:
   deploy:
     name: 🚀 Deploy to Production
     needs: [test-optimized, test, lint, security, container-build]  # Includes both test paths
-    runs-on: [self-hosted, containerd]
+    runs-on: [self-hosted, linux, x64, kubernetes]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
