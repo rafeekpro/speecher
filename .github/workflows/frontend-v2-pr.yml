@@ -214,11 +214,7 @@ jobs:
         # Build with Kaniko in Kubernetes
         echo "🔨 Building container image with Kaniko..."
         
-        # Create ConfigMap with Dockerfile only (small file)
-        kubectl create configmap dockerfile-frontend-${{ github.run_id }} \
-          --from-file=Dockerfile="$DOCKERFILE_PATH" \
-          --namespace=${{ env.KUBE_NAMESPACE }} \
-          --dry-run=client -o yaml | kubectl apply -f -
+        # No need for ConfigMap - using Git clone in init container
         
         # Create Kaniko build job using Git context directly
         cat <<EOF | kubectl apply -f -
@@ -228,21 +224,29 @@ jobs:
           name: kaniko-frontend-${{ github.run_id }}
           namespace: ${{ env.KUBE_NAMESPACE }}
         spec:
-          backoffLimit: 1
-          activeDeadlineSeconds: 600
+          backoffLimit: 2
+          activeDeadlineSeconds: 900
           template:
             spec:
               restartPolicy: Never
               initContainers:
-              - name: prepare-dockerfile
-                image: busybox:latest
+              - name: prepare-build-context
+                image: alpine/git:latest
                 command: ['sh', '-c']
                 args:
                   - |
-                    cp /dockerfile/Dockerfile /workspace/Dockerfile
+                    git clone --depth 1 https://github.com/${{ github.repository }}.git /workspace/context
+                    cd /workspace/context
+                    git checkout ${{ github.sha }}
+                    if [ -f "$DOCKERFILE_PATH" ]; then
+                      cp "$DOCKERFILE_PATH" /workspace/Dockerfile
+                    else
+                      cp /workspace/context/docker/react.Dockerfile /workspace/Dockerfile 2>/dev/null || echo "No frontend Dockerfile found"
+                    fi
+                env:
+                - name: DOCKERFILE_PATH
+                  value: "${{ env.DOCKERFILE_PATH || 'docker/react.Dockerfile' }}"
                 volumeMounts:
-                - name: dockerfile
-                  mountPath: /dockerfile
                 - name: workspace
                   mountPath: /workspace
               containers:
@@ -250,26 +254,22 @@ jobs:
                 image: gcr.io/kaniko-project/executor:latest
                 args:
                 - --dockerfile=/workspace/Dockerfile
-                - --context=git://github.com/${{ github.repository }}.git#${{ github.sha }}
+                - --context=dir:///workspace/context
                 - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
-                - --cache=true
-                - --push=false
-                - --tar-path=/workspace/image.tar
+                - --no-push
+                - --verbosity=debug
                 - --build-arg=FRONTEND_DIR=${{ env.FRONTEND_DIR }}
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
               volumes:
-              - name: dockerfile
-                configMap:
-                  name: dockerfile-frontend-${{ github.run_id }}
               - name: workspace
                 emptyDir: {}
         EOF
         
         # Wait for build
         kubectl wait --for=condition=complete job/kaniko-frontend-${{ github.run_id }} \
-          --timeout=600s \
+          --timeout=900s \
           --namespace=${{ env.KUBE_NAMESPACE }} || {
           echo "❌ Kaniko build failed"
           kubectl logs job/kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --tail=50
@@ -280,7 +280,6 @@ jobs:
         
         # Cleanup
         kubectl delete job kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
-        kubectl delete configmap dockerfile-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
     
     - name: 🧪 Test Frontend Container
       run: |

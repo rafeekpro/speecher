@@ -283,12 +283,7 @@ jobs:
       run: |
         echo "🏗️ Building backend image with Kaniko for PR ${{ github.event.pull_request.number }}..."
         
-        # Use github-runner namespace with unique ConfigMap name
-        echo "📦 Preparing build context..."
-        kubectl create configmap backend-build-context-pr-${{ github.event.pull_request.number }} \
-          --from-file=. \
-          --namespace=github-runner \
-          --dry-run=client -o yaml | kubectl apply -f -
+        # No need for ConfigMap - using Git clone in init container
         
         # Backend build job with Kaniko
         cat <<EOF | kubectl apply -f -
@@ -300,20 +295,34 @@ jobs:
           labels:
             pr-number: "${{ github.event.pull_request.number }}"
         spec:
+          backoffLimit: 2
+          activeDeadlineSeconds: 900
           template:
             spec:
               restartPolicy: Never
+              initContainers:
+              - name: prepare-build-context
+                image: alpine/git:latest
+                command: ['sh', '-c']
+                args:
+                  - |
+                    git clone --depth 1 https://github.com/${{ github.repository }}.git /workspace/context
+                    cd /workspace/context
+                    git checkout ${{ github.sha }}
+                volumeMounts:
+                - name: workspace
+                  mountPath: /workspace
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
                 args:
-                - --dockerfile=/workspace/Dockerfile
-                - --context=/workspace
+                - --dockerfile=/workspace/context/Dockerfile
+                - --context=dir:///workspace/context
                 - --destination=speecher-backend:pr-${{ github.event.pull_request.number }}
-                - --cache=true
-                - --cache-ttl=24h
+                - --no-push
+                - --verbosity=debug
                 volumeMounts:
-                - name: build-context
+                - name: workspace
                   mountPath: /workspace
                 resources:
                   requests:
@@ -323,26 +332,23 @@ jobs:
                     memory: "2Gi"
                     cpu: "1000m"
               volumes:
-              - name: build-context
-                configMap:
-                  name: backend-build-context-pr-${{ github.event.pull_request.number }}
+              - name: workspace
+                emptyDir: {}
         EOF
         
         echo "⏳ Waiting for backend build to complete..."
         kubectl wait --for=condition=complete job/backend-build-pr-${{ github.event.pull_request.number }} \
-          --timeout=600s \
+          --timeout=900s \
           --namespace=github-runner || {
           echo "❌ Backend build failed"
           kubectl logs job/backend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --tail=50
-          kubectl delete configmap dockerfile-backend-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
           kubectl delete job backend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
           exit 1
         }
         
         echo "✅ Backend image built successfully with Kaniko"
         
-        # Cleanup backend ConfigMap and job
-        kubectl delete configmap dockerfile-backend-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
+        # Cleanup backend job
         kubectl delete job backend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
     
     - name: 🏗️ Build Frontend Container image with Kaniko
@@ -350,12 +356,7 @@ jobs:
         echo "🏗️ Building frontend image with Kaniko..."
         
         if [ -f "docker/react.Dockerfile" ]; then
-          # Create frontend build context ConfigMap
-          echo "📦 Preparing frontend build context..."
-          kubectl create configmap frontend-build-context-pr-${{ github.event.pull_request.number }} \
-            --from-file=. \
-            --namespace=github-runner \
-            --dry-run=client -o yaml | kubectl apply -f -
+          # No need for ConfigMap - using Git clone in init container
           
           # Frontend build job with unique name
           cat <<EOF | kubectl apply -f -
@@ -367,20 +368,34 @@ jobs:
           labels:
             pr-number: "${{ github.event.pull_request.number }}"
         spec:
+          backoffLimit: 2
+          activeDeadlineSeconds: 900
           template:
             spec:
               restartPolicy: Never
+              initContainers:
+              - name: prepare-build-context
+                image: alpine/git:latest
+                command: ['sh', '-c']
+                args:
+                  - |
+                    git clone --depth 1 https://github.com/${{ github.repository }}.git /workspace/context
+                    cd /workspace/context
+                    git checkout ${{ github.sha }}
+                volumeMounts:
+                - name: workspace
+                  mountPath: /workspace
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
                 args:
-                - --dockerfile=/workspace/docker/react.Dockerfile
-                - --context=/workspace
+                - --dockerfile=/workspace/context/docker/react.Dockerfile
+                - --context=dir:///workspace/context
                 - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
-                - --cache=true
-                - --cache-ttl=24h
+                - --no-push
+                - --verbosity=debug
                 volumeMounts:
-                - name: build-context
+                - name: workspace
                   mountPath: /workspace
                 resources:
                   requests:
@@ -390,14 +405,13 @@ jobs:
                     memory: "2Gi"
                     cpu: "1000m"
               volumes:
-              - name: build-context
-                configMap:
-                  name: frontend-build-context-pr-${{ github.event.pull_request.number }}
+              - name: workspace
+                emptyDir: {}
         EOF
           
           echo "⏳ Waiting for frontend build to complete..."
           kubectl wait --for=condition=complete job/frontend-build-pr-${{ github.event.pull_request.number }} \
-            --timeout=600s \
+            --timeout=900s \
             --namespace=github-runner || {
             echo "❌ Frontend build failed"
             kubectl logs job/frontend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --tail=50
@@ -406,8 +420,7 @@ jobs:
           
           echo "✅ Frontend image built successfully with Kaniko"
           
-          # Cleanup frontend ConfigMap and job
-          kubectl delete configmap dockerfile-frontend-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
+          # Cleanup frontend job
           kubectl delete job frontend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
         else
           echo "⚠️ Frontend Dockerfile not found, skipping frontend build"
