@@ -144,6 +144,8 @@ jobs:
                 - --destination=${{ env.TEST_IMAGE_LATEST }}
                 - --push=false
                 - --tar-path=/workspace/image.tar
+                - --cache=true
+                - --cache-ttl=24h
                 - --verbosity=info  # Reduced verbosity for cleaner logs
                 volumeMounts:
                 - name: workspace

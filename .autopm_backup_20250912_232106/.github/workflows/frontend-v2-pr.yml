@@ -276,6 +276,12 @@ jobs:
                 - --context=dir:///workspace
                 - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
                 - --no-push
+                - --cache=true
+                - --cache-ttl=24h
+                - --cache-repo=speecher-frontend-cache
+                - --cache-copy-layers=true
+                - --compressed-caching=false
+                - --use-new-run=true
                 - --verbosity=info
                 env:
                 - name: DOCKER_CONFIG

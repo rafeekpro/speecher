@@ -209,6 +209,8 @@ jobs:
                 - --context=dir:///workspace/context
                 - --destination=speecher-backend:test
                 - --no-push
+                - --cache=true
+                - --cache-ttl=24h
                 - --verbosity=info  # Reduced verbosity for cleaner logs
                 volumeMounts:
                 - name: workspace
@@ -397,6 +399,8 @@ jobs:
                 - --context=dir:///workspace/context
                 - --destination=speecher-frontend:test
                 - --no-push
+                - --cache=true
+                - --cache-ttl=24h
                 - --verbosity=info  # Reduced verbosity for cleaner logs
                 volumeMounts:
                 - name: workspace

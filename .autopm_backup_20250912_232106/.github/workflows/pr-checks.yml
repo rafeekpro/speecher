@@ -342,6 +342,8 @@ jobs:
                 - --context=dir:///workspace/context
                 - --destination=speecher-backend:pr-${{ github.event.pull_request.number }}
                 - --no-push
+                - --cache=true
+                - --cache-ttl=24h
                 - --verbosity=info  # Reduced verbosity for cleaner logs
                 volumeMounts:
                 - name: workspace
@@ -569,6 +571,8 @@ jobs:
                 - --context=dir:///workspace/context
                 - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
                 - --no-push
+                - --cache=true
+                - --cache-ttl=24h
                 - --verbosity=info  # Reduced verbosity for cleaner logs
                 volumeMounts:
                 - name: workspace
