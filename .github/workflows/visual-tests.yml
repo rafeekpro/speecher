@@ -71,7 +71,8 @@ jobs:
         working-directory: ./src/react-frontend
         run: |
           npm ci
-          npx playwright install --with-deps ${{ matrix.browser }}
+          # Install Playwright browsers without sudo (already installed in runner)
+          npx playwright install ${{ matrix.browser }} || echo "Browser may be pre-installed"
 
       - name: 📸 Download baseline screenshots
         uses: actions/download-artifact@v4
