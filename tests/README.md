@@ -240,20 +240,20 @@ class TestUserService:
 
 ```bash
 # Run tests with verbose output
-docker-compose --profile test run --rm test-runner pytest -vvs
+docker compose --profile test run --rm test-runner pytest -vvs
 
 # Run with debugger
-docker-compose --profile test run --rm test-runner pytest --pdb
+docker compose --profile test run --rm test-runner pytest --pdb
 
 # Run specific test with full traceback
-docker-compose --profile test run --rm test-runner \
+docker compose --profile test run --rm test-runner \
   pytest tests/unit/test_api.py::TestAPI::test_endpoint -vvs --tb=long
 
 # Check test logs
-docker-compose --profile test logs test-runner
+docker compose --profile test logs test-runner
 
 # Interactive debugging session
-docker-compose --profile test run --rm test-runner bash
+docker compose --profile test run --rm test-runner bash
 # Then inside container:
 python -m pytest tests/unit/test_api.py --pdb
 ```
@@ -277,7 +277,7 @@ python -m pytest tests/unit/test_api.py --pdb
 
 | Issue | Symptoms | Solution |
 |-------|----------|----------|
-| **Database Connection** | `ConnectionError` | Check MongoDB is running: `docker-compose ps` |
+| **Database Connection** | `ConnectionError` | Check MongoDB is running: `docker compose ps` |
 | **Port Conflicts** | `Address already in use` | Stop other services: `make dev-stop` |
 | **Stale Test Data** | Unexpected test results | Clean database: `make test-cleanup` |
 | **Import Errors** | `ModuleNotFoundError` | Rebuild container: `make test-build` |
@@ -338,7 +338,7 @@ python -m pytest tests/unit/test_api.py --pdb
 **Solutions**:
 ```bash
 # Match CI environment locally
-docker-compose --profile test run --rm \
+docker compose --profile test run --rm \
   -e CI=true \
   -e TZ=UTC \
   test-runner pytest
@@ -476,7 +476,7 @@ git push             # CI runs automatically
 # Debugging Workflow
 make test            # See failure
 make test-watch      # Fix and auto-rerun
-docker-compose --profile test logs  # Check logs
+docker compose --profile test logs  # Check logs
 make test-cleanup    # Clean and retry
 
 # Performance Testing

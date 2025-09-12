@@ -68,10 +68,10 @@ GCP_CREDENTIALS_FILE=./path-to-credentials.json
 
 ```bash
 # For development with hot-reload (RECOMMENDED for developers)
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker-compose.dev.yml up
 
 # OR for basic setup
-docker-compose up
+docker compose up
 ```
 
 ### Step 3: Access the Application
@@ -128,7 +128,7 @@ Best for active development with these features:
 - ✅ **Detailed logging**
 
 ```bash
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker-compose.dev.yml up
 ```
 
 ### Basic Mode (`docker-compose.yml`)
@@ -139,7 +139,7 @@ Simple setup with core features:
 - ✅ Good for quick testing
 
 ```bash
-docker-compose up
+docker compose up
 ```
 
 ### Production Mode (`docker-compose.prod.yml`)
@@ -152,7 +152,7 @@ Optimized for deployment:
 - ✅ SSL/TLS support
 
 ```bash
-docker-compose -f docker-compose.prod.yml up
+docker compose -f docker-compose.prod.yml up
 ```
 
 ## 📁 Project Structure
@@ -300,14 +300,14 @@ lsof -i :5432  # PostgreSQL port
 
 ```bash
 # Check database container status
-docker-compose ps
+docker compose ps
 
 # View database logs
-docker-compose logs mongodb  # or postgres for dev mode
+docker compose logs mongodb  # or postgres for dev mode
 
 # Solution: Ensure database container is healthy
-docker-compose down -v  # Remove volumes
-docker-compose up -d mongodb  # Start database first
+docker compose down -v  # Remove volumes
+docker compose up -d mongodb  # Start database first
 ```
 
 #### 3. Frontend shows "API Connection Failed"
@@ -320,21 +320,21 @@ curl http://localhost:8000/health
 # Ensure CORS_ORIGINS includes http://localhost:3000
 
 # Solution: Restart backend with correct environment
-docker-compose restart backend
+docker compose restart backend
 ```
 
 #### 4. Cloud provider authentication errors
 
 ```bash
 # Verify environment variables are loaded
-docker-compose exec backend env | grep AWS
-docker-compose exec backend env | grep AZURE
-docker-compose exec backend env | grep GCP
+docker compose exec backend env | grep AWS
+docker compose exec backend env | grep AZURE
+docker compose exec backend env | grep GCP
 
 # Solution: Check .env file has correct credentials
 # Restart containers after updating .env
-docker-compose down
-docker-compose up
+docker compose down
+docker compose up
 ```
 
 #### 5. Hot-reload not working in development
@@ -348,7 +348,7 @@ docker-compose up
 # Should have: - ./src/backend:/app/src/backend:cached
 
 # Solution: Use docker-compose.dev.yml for development
-docker-compose -f docker-compose.dev.yml up
+docker compose -f docker-compose.dev.yml up
 ```
 
 #### 6. Out of memory errors
@@ -366,18 +366,18 @@ docker stats
 
 ```bash
 # View all logs
-docker-compose logs -f
+docker compose logs -f
 
 # View specific service logs
-docker-compose logs -f backend
-docker-compose logs -f frontend
+docker compose logs -f backend
+docker compose logs -f frontend
 
 # Access container shell for debugging
-docker-compose exec backend bash
-docker-compose exec frontend sh
+docker compose exec backend bash
+docker compose exec frontend sh
 
 # Check service health
-docker-compose ps
+docker compose ps
 curl http://localhost:8000/health
 ```
 
@@ -455,13 +455,13 @@ console.log('Transcription:', result.transcript);
 
 ```bash
 # Run all backend tests
-docker-compose -f docker-compose.dev.yml run backend pytest
+docker compose -f docker-compose.dev.yml run backend pytest
 
 # With coverage
-docker-compose -f docker-compose.dev.yml run backend pytest --cov=speecher
+docker compose -f docker-compose.dev.yml run backend pytest --cov=speecher
 
 # Run specific test file
-docker-compose -f docker-compose.dev.yml run backend pytest tests/test_api.py
+docker compose -f docker-compose.dev.yml run backend pytest tests/test_api.py
 ```
 
 ### Frontend Tests (React/TypeScript)
@@ -484,7 +484,7 @@ npm test -- --watch
 
 ```bash
 # Run E2E tests with test profile
-docker-compose --profile test up test-runner
+docker compose --profile test up test-runner
 ```
 
 ## 🔄 Development Best Practices
@@ -521,7 +521,7 @@ npm run format
 
 1. **Use development mode** for active coding:
    ```bash
-   docker-compose -f docker-compose.dev.yml up
+   docker compose -f docker-compose.dev.yml up
    ```
 
 2. **Write tests first** (TDD approach)

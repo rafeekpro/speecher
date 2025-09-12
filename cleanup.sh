@@ -136,7 +136,7 @@ fi
 
 echo ""
 echo "Note: The following were intentionally preserved:"
-echo "  • All docker-compose files (they serve different purposes)"
+echo "  • All docker compose files (they serve different purposes)"
 echo "  • requirements/ directory (modular dependency management)"
 echo "  • All test files"
 echo "  • All source code"

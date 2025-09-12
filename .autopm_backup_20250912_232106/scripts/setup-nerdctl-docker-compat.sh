@@ -26,21 +26,21 @@ echo "🧪 Testing basic functionality..."
 docker version || nerdctl version
 docker ps || echo "Docker ps works via nerdctl"
 
-# Check for docker-compose compatibility
-if ! command -v docker-compose &> /dev/null; then
+# Check for docker compose compatibility
+if ! command -v docker compose &> /dev/null; then
     if nerdctl compose version &> /dev/null; then
-        echo "🔗 Creating docker-compose -> nerdctl compose wrapper..."
-        sudo tee /usr/local/bin/docker-compose > /dev/null << 'EOF'
+        echo "🔗 Creating docker compose -> nerdctl compose wrapper..."
+        sudo tee /usr/local/bin/docker compose > /dev/null << 'EOF'
 #!/bin/bash
 exec nerdctl compose "$@"
 EOF
         sudo chmod +x /usr/local/bin/docker-compose
-        echo "✅ docker-compose command now points to nerdctl compose"
+        echo "✅ docker compose command now points to nerdctl compose"
     else
-        echo "⚠️  nerdctl compose not available, you may need docker-compose for some workflows"
+        echo "⚠️  nerdctl compose not available, you may need docker compose for some workflows"
     fi
 else
-    echo "ℹ️  docker-compose command already exists: $(which docker-compose)"
+    echo "ℹ️  docker compose command already exists: $(which docker-compose)"
 fi
 
 echo ""
@@ -48,7 +48,7 @@ echo "🎉 nerdctl Docker compatibility setup complete!"
 echo ""
 echo "Available commands:"
 echo "  docker -> $(readlink -f /usr/local/bin/docker 2>/dev/null || echo 'native docker')"
-echo "  docker-compose -> $(readlink -f /usr/local/bin/docker-compose 2>/dev/null || echo 'native docker-compose')"
+echo "  docker compose -> $(readlink -f /usr/local/bin/docker compose 2>/dev/null || echo 'native docker-compose')"
 echo "  nerdctl -> $(which nerdctl)"
 echo ""
 echo "Your existing GitHub Actions workflows should now work without modifications!"

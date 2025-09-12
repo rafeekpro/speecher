@@ -53,7 +53,7 @@ class DevManager:
     
     def get_container_name(self, service: str) -> str:
         """Get the actual container name for a service from docker-compose"""
-        # Try to get container name from docker-compose ps
+        # Try to get container name from docker compose ps
         result = subprocess.run(
             [*self.get_docker_compose_cmd(), "ps", "-q", service],
             capture_output=True,
@@ -78,7 +78,7 @@ class DevManager:
         return f"{project_name}-{service}-1"
     
     def get_project_name(self) -> str:
-        """Get the docker-compose project name"""
+        """Get the docker compose project name"""
         # Try to get from COMPOSE_PROJECT_NAME env var
         project_name = os.getenv("COMPOSE_PROJECT_NAME")
         if project_name:
@@ -194,11 +194,11 @@ class DevManager:
             self.docker_compose_cmd = ["docker", "compose"]
             return True
         
-        # Try old docker-compose command
+        # Try old docker compose command
         result = self.run_command(["docker-compose", "--version"], capture_output=True, check=False)
         if result and result.returncode == 0:
             self.docker_compose_cmd = ["docker-compose"]
-            self.print_info("Using docker-compose (legacy)")
+            self.print_info("Using docker compose (legacy)")
             return True
         
         self.print_error("Neither 'docker compose' nor 'docker-compose' is installed")

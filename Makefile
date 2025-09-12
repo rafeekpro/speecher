@@ -46,7 +46,7 @@ test-local: ## 🐳 Run tests in Docker containers (recommended)
 	@echo "$(YELLOW)🔄 Starting test dependencies...$(NC)"
 	@$(DOCKER_COMPOSE) up -d mongodb
 	@echo "$(YELLOW)⏳ Waiting for MongoDB to be healthy...$(NC)"
-	@timeout 30 sh -c 'until docker-compose ps mongodb | grep -q "healthy"; do sleep 1; done' || \
+	@timeout 30 sh -c 'until docker compose ps mongodb | grep -q "healthy"; do sleep 1; done' || \
 		(echo "$(RED)❌ MongoDB failed to start$(NC)" && exit 1)
 	@echo "$(GREEN)🚀 Running tests in container...$(NC)"
 	@$(TEST_COMPOSE) run --rm test-runner || \
@@ -284,7 +284,7 @@ info: ## ℹ️ Show project information
 	@echo "Project: Speecher"
 	@echo "Python: $$(python --version 2>&1)"
 	@echo "Docker: $$(docker --version 2>&1)"
-	@echo "Docker Compose: $$(docker-compose --version 2>&1)"
+	@echo "Docker Compose: $$(docker compose --version 2>&1)"
 	@echo "Current Branch: $$(git branch --show-current)"
 	@echo "Last Commit: $$(git log -1 --oneline)"
 	@echo ""

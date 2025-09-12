@@ -13,7 +13,7 @@ Our docker-first approach works locally but has limitations in K8s CI/CD environ
 ### 1. **Local Development (Pure Docker-First)**
 ```bash
 # Developers use Docker locally
-docker-compose up -d                    # Local services
+docker compose up -d                    # Local services
 docker build -t speecher-backend .     # Local builds  
 docker run --rm -p 8000:8000 backend   # Local testing
 ```

@@ -296,7 +296,7 @@ if [[ -d /usr/local/bin ]] && [[ ":\${PATH}:" != *":/usr/local/bin:"* ]]; then
     export PATH="/usr/local/bin:\${PATH}"
 fi
 
-# Alias for docker-compose compatibility
+# Alias for docker compose compatibility
 alias docker-compose='nerdctl compose'
 ${marker} END
 EOF

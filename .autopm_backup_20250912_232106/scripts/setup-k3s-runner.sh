@@ -168,14 +168,14 @@ export CONTAINERD_NAMESPACE=k8s.io
 # Map docker commands to nerdctl
 case "$1" in
     "compose")
-        # docker compose -> nerdctl compose or docker-compose fallback
+        # docker compose -> nerdctl compose or docker compose fallback
         if command -v nerdctl >/dev/null 2>&1; then
             nerdctl "$@"
-        elif command -v docker-compose >/dev/null 2>&1; then
+        elif command -v docker compose >/dev/null 2>&1; then
             shift
-            docker-compose "$@"
+            docker compose "$@"
         else
-            echo "Neither nerdctl compose nor docker-compose available"
+            echo "Neither nerdctl compose nor docker compose available"
             exit 1
         fi
         ;;

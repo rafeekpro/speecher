@@ -22,7 +22,7 @@ This document describes our comprehensive hybrid approach that combines a **dock
 ```mermaid
 graph TD
     subgraph "🏠 Local Development"
-        A[Developer] --> B[docker-compose up]
+        A[Developer] --> B[docker compose up]
         A --> C[docker build]
     end
     
@@ -51,7 +51,7 @@ You continue to work exactly as before. The goal is zero disruption to your loca
 
 ```bash
 # Your local workflow remains the same!
-docker-compose -f docker-compose.dev.yml up --build
+docker compose -f docker-compose.dev.yml up --build
 
 # Manually build an image
 docker build -t my-feature-image .

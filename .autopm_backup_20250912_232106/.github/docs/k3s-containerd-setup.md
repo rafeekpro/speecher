@@ -111,7 +111,7 @@ kubectl get pods --all-namespaces
 
 1. **No Docker Daemon Required**: Works with containerd-only K3s installations
 2. **No Sudo Required**: User-level installation increases security
-3. **Kubernetes Native**: Uses kubectl instead of docker-compose for orchestration
+3. **Kubernetes Native**: Uses kubectl instead of docker compose for orchestration
 4. **Drop-in Replacement**: nerdctl provides Docker-compatible CLI interface
 5. **Better Resource Usage**: containerd is lighter than full Docker daemon
 

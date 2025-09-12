@@ -98,7 +98,7 @@ services:
     networks:
       - speacher-network
 
-  # Test runner service - run with: docker-compose --profile test up test-runner
+  # Test runner service - run with: docker compose --profile test up test-runner
   test-runner:
     build:
       context: .

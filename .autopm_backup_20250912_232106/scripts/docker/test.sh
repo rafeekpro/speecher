@@ -6,7 +6,7 @@ set -e
 echo "Running Speecher integration tests in Docker..."
 
 # Check if services are running
-if ! docker-compose ps | grep -q "speecher-backend.*Up.*healthy"; then
+if ! docker compose ps | grep -q "speecher-backend.*Up.*healthy"; then
     echo "Backend service is not running. Starting services first..."
     ./docker-start.sh
 fi
@@ -16,7 +16,7 @@ mkdir -p test_results
 
 # Run tests
 echo "Running integration tests..."
-docker-compose --profile test up --abort-on-container-exit test-runner
+docker compose --profile test up --abort-on-container-exit test-runner
 
 # Check test results
 if [ -f test_results/results.xml ]; then
