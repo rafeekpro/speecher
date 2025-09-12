@@ -47,7 +47,7 @@ jobs:
           
           if kubectl cluster-info >/dev/null 2>&1; then
             echo "✅ K3s cluster accessible"
-            kubectl get nodes
+            # Note: kubectl get nodes requires cluster-level permissions
             kubectl get namespaces
           else
             echo "❌ K3s cluster not accessible"

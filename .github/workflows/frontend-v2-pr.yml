@@ -207,26 +207,13 @@ jobs:
         # Build with Kaniko in Kubernetes
         echo "🔨 Building container image with Kaniko..."
         
-        # Create ConfigMap with Dockerfile
+        # Create ConfigMap with Dockerfile only (small file)
         kubectl create configmap dockerfile-frontend-${{ github.run_id }} \
           --from-file=Dockerfile="$DOCKERFILE_PATH" \
           --namespace=${{ env.KUBE_NAMESPACE }} \
           --dry-run=client -o yaml | kubectl apply -f -
         
-        # Create source archive
-        tar czf /tmp/source.tar.gz \
-          --exclude='.git' \
-          --exclude='node_modules' \
-          --exclude='coverage' \
-          --exclude='test_results' \
-          . 2>/dev/null || true
-        
-        kubectl create configmap source-frontend-${{ github.run_id }} \
-          --from-file=source.tar.gz=/tmp/source.tar.gz \
-          --namespace=${{ env.KUBE_NAMESPACE }} \
-          --dry-run=client -o yaml | kubectl apply -f -
-        
-        # Create Kaniko build job
+        # Create Kaniko build job using Git context directly
         cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
@@ -240,17 +227,13 @@ jobs:
             spec:
               restartPolicy: Never
               initContainers:
-              - name: extract-source
+              - name: prepare-dockerfile
                 image: busybox:latest
                 command: ['sh', '-c']
                 args:
                   - |
-                    cd /workspace
-                    tar xzf /source/source.tar.gz
                     cp /dockerfile/Dockerfile /workspace/Dockerfile
                 volumeMounts:
-                - name: source
-                  mountPath: /source
                 - name: dockerfile
                   mountPath: /dockerfile
                 - name: workspace
@@ -260,18 +243,16 @@ jobs:
                 image: gcr.io/kaniko-project/executor:latest
                 args:
                 - --dockerfile=/workspace/Dockerfile
-                - --context=/workspace
+                - --context=git://github.com/${{ github.repository }}.git#${{ github.sha }}
                 - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
                 - --cache=true
                 - --push=false
                 - --tar-path=/workspace/image.tar
+                - --build-arg=FRONTEND_DIR=${{ env.FRONTEND_DIR }}
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
               volumes:
-              - name: source
-                configMap:
-                  name: source-frontend-${{ github.run_id }}
               - name: dockerfile
                 configMap:
                   name: dockerfile-frontend-${{ github.run_id }}
@@ -293,7 +274,6 @@ jobs:
         # Cleanup
         kubectl delete job kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
         kubectl delete configmap dockerfile-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
-        kubectl delete configmap source-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
     
     - name: 🧪 Test Frontend Container
       run: |
