@@ -200,20 +200,7 @@ jobs:
           --from-file=nginx.prod.conf=./docker/nginx.prod.conf \
           --namespace=${{ env.KUBE_NAMESPACE }}
         
-        # Create a tarball of the entire source for proper multi-stage build
-        echo "📦 Creating build context tarball..."
-        tar -czf /tmp/build-context.tar.gz \
-          --exclude=node_modules \
-          --exclude=.git \
-          --exclude=coverage \
-          --exclude=build \
-          --exclude=dist \
-          ./src/react-frontend ./docker
-        
-        # Create ConfigMap with build context
-        kubectl create configmap kaniko-context-${{ github.run_id }} \
-          --from-file=context.tar.gz=/tmp/build-context.tar.gz \
-          --namespace=${{ env.KUBE_NAMESPACE }}
+        # NO tarball or ConfigMap for source code - we'll use Git clone in init container
         
         # Build with Kaniko in Kubernetes
         echo "🔨 Building container image with Kaniko..."
@@ -222,7 +209,6 @@ jobs:
         echo "🧹 Cleaning up any existing Kaniko resources..."
         kubectl delete job kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
         kubectl delete configmap kaniko-dockerfile-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
-        kubectl delete configmap kaniko-context-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
         
         # Create optimized Kaniko build job
         cat <<EOF | kubectl apply -f -
@@ -248,36 +234,37 @@ jobs:
               restartPolicy: Never
               serviceAccountName: github-runner  # Use dedicated ServiceAccount
               initContainers:
-              - name: prepare-build-context
-                image: busybox:latest
+              - name: git-clone
+                image: alpine/git:latest
                 command: ['sh', '-c']
                 args:
                   - |
-                    echo "Preparing build context..."
-                    # Extract the Dockerfile from ConfigMap
+                    echo "Cloning repository..."
+                    # Clone the repository at the specific commit
+                    git clone --depth 10 \
+                      https://github.com/${{ github.repository }}.git /workspace
+                    
+                    cd /workspace
+                    # Checkout the exact commit for this PR
+                    git checkout ${{ github.sha }}
+                    
+                    # Copy Dockerfile and nginx config from ConfigMap
                     cp /config/Dockerfile /workspace/Dockerfile
                     cp /config/nginx.prod.conf /workspace/nginx.prod.conf
                     
-                    # Extract the build context tarball
-                    tar -xzf /context/context.tar.gz -C /workspace/
-                    
-                    # Ensure proper structure for multi-stage build
-                    ls -la /workspace/
+                    # Verify structure for multi-stage build
                     echo "Build context structure:"
+                    ls -la /workspace/
+                    ls -la /workspace/src/react-frontend/ || echo "react-frontend directory will be created during build"
                     find /workspace -type f -name "*.json" | head -5
-                    find /workspace -type d -name "src" | head -5
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
                 - name: dockerfile-config
                   mountPath: /config
-                - name: context-config
-                  mountPath: /context
                 securityContext:
-                  runAsUser: 1000
-                  runAsNonRoot: true
+                  runAsUser: 0  # Git needs root to clone
                   allowPrivilegeEscalation: false
-                  readOnlyRootFilesystem: true
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
@@ -320,9 +307,6 @@ jobs:
               - name: dockerfile-config
                 configMap:
                   name: kaniko-dockerfile-${{ github.run_id }}
-              - name: context-config
-                configMap:
-                  name: kaniko-context-${{ github.run_id }}
         EOF
         
         # Wait for build
@@ -334,7 +318,6 @@ jobs:
           kubectl logs job/kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --all-containers=true --tail=100
           kubectl delete job kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
           kubectl delete configmap kaniko-dockerfile-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
-          kubectl delete configmap kaniko-context-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
           exit 1
         }
         
@@ -343,7 +326,6 @@ jobs:
         # Cleanup
         kubectl delete job kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
         kubectl delete configmap kaniko-dockerfile-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
-        kubectl delete configmap kaniko-context-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
     
     - name: 🔍 Debug Frontend Kaniko Build Failure
       if: failure()
@@ -480,11 +462,11 @@ jobs:
           echo "❌ Dockerfile ConfigMap missing"
         fi
         
-        # Check if context ConfigMap exists
-        if kubectl get configmap kaniko-context-${{ github.run_id }} -n $NAMESPACE >/dev/null 2>&1; then
-          echo "✅ Build context ConfigMap exists"
+        # Check if Dockerfile ConfigMap exists
+        if kubectl get configmap kaniko-dockerfile-${{ github.run_id }} -n $NAMESPACE >/dev/null 2>&1; then
+          echo "✅ Dockerfile ConfigMap exists"
         else
-          echo "❌ Build context ConfigMap missing"
+          echo "❌ Dockerfile ConfigMap missing"
         fi
         echo ""
         
