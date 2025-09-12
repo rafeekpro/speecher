@@ -330,6 +330,80 @@ jobs:
         kubectl delete job kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
         kubectl delete configmap kaniko-dockerfile-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
     
+    - name: 🔍 Debug Pause - Kubernetes Cluster Inspection
+      if: failure()
+      run: |
+        echo "🔍 ========================================"
+        echo "🔍 TEMPORARY DEBUG PAUSE - CLUSTER INSPECTION"
+        echo "🔍 ========================================"
+        echo ""
+        echo "❌ Build failed! Pausing for 15 minutes to allow manual debugging."
+        echo ""
+        echo "📋 Current Kubernetes cluster state:"
+        echo "------------------------------------"
+        
+        # Show current cluster state
+        echo "🔍 Pods in namespace ${{ env.KUBE_NAMESPACE }}:"
+        kubectl get pods --namespace=${{ env.KUBE_NAMESPACE }} -o wide --sort-by=.metadata.creationTimestamp
+        echo ""
+        
+        echo "🔍 Jobs in namespace ${{ env.KUBE_NAMESPACE }}:"
+        kubectl get jobs --namespace=${{ env.KUBE_NAMESPACE }} -o wide --sort-by=.metadata.creationTimestamp
+        echo ""
+        
+        echo "🔍 ConfigMaps related to this build:"
+        kubectl get configmaps --namespace=${{ env.KUBE_NAMESPACE }} | grep -E "${{ github.run_id }}|dockerfile" || echo "No build-related ConfigMaps found"
+        echo ""
+        
+        echo "🛠️  MANUAL DEBUGGING COMMANDS:"
+        echo "-----------------------------"
+        echo "Run these commands locally to debug further:"
+        echo ""
+        echo "# Connect to the same cluster context:"
+        echo "kubectl config current-context"
+        echo ""
+        echo "# Check pods and jobs:"
+        echo "kubectl get pods --namespace=${{ env.KUBE_NAMESPACE }} -o wide"
+        echo "kubectl get jobs --namespace=${{ env.KUBE_NAMESPACE }} -o wide"
+        echo ""
+        echo "# Find the failed Kaniko pod:"
+        echo "kubectl get pods --namespace=${{ env.KUBE_NAMESPACE }} -l app=kaniko-build,component=frontend"
+        echo ""
+        echo "# Check init container logs (git-clone):"
+        echo "kubectl logs <pod-name> --namespace=${{ env.KUBE_NAMESPACE }} -c git-clone"
+        echo ""
+        echo "# Check main container logs (kaniko):"
+        echo "kubectl logs <pod-name> --namespace=${{ env.KUBE_NAMESPACE }} -c kaniko"
+        echo ""
+        echo "# Get detailed pod description:"
+        echo "kubectl describe pod <pod-name> --namespace=${{ env.KUBE_NAMESPACE }}"
+        echo ""
+        echo "# Check job description:"
+        echo "kubectl describe job kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }}"
+        echo ""
+        echo "# Check events:"
+        echo "kubectl get events --namespace=${{ env.KUBE_NAMESPACE }} --sort-by=.lastTimestamp"
+        echo ""
+        echo "# Check ConfigMap contents:"
+        echo "kubectl get configmap kaniko-dockerfile-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} -o yaml"
+        echo ""
+        echo "⏰ DEBUG TIMEOUT: This step will sleep for 15 minutes (900 seconds)"
+        echo "   Use this time to run the commands above and investigate the issue."
+        echo ""
+        echo "🔥 To skip the remaining sleep time, cancel this workflow run."
+        echo ""
+        echo "⏰ Starting 15-minute debug pause..."
+        
+        # Sleep for 15 minutes to allow manual investigation
+        for i in {1..15}; do
+          echo "⏰ Debug pause: $i/15 minutes elapsed..."
+          sleep 60
+        done
+        
+        echo ""
+        echo "✅ Debug pause completed. Check the logs above for debugging commands."
+        echo "🔍 ========================================"
+    
     - name: 🔍 Debug Frontend Kaniko Build Failure
       if: failure()
       run: |
