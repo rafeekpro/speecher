@@ -197,36 +197,12 @@ jobs:
         kubectl delete configmap dockerfile-test-${{ github.run_id }} --namespace=$NAMESPACE --ignore-not-found=true
         kubectl delete configmap source-archive-${{ github.run_id }} --namespace=$NAMESPACE --ignore-not-found=true
     
-    - name: 🏗️ Alternative: Build with Docker (if Kaniko fails)
+    - name: 🏗️ Alternative: Skip container build if no permissions
       if: steps.check-perms.outputs.can_create_configmap == 'false'
       run: |
-        echo "⚠️ Cannot use Kaniko due to permissions, attempting Docker build..."
-        
-        # Check if Docker is available
-        if command -v docker &> /dev/null; then
-          echo "🐳 Docker is available, building image..."
-          
-          if [ -f "docker/test-optimized.Dockerfile" ]; then
-            docker build -f docker/test-optimized.Dockerfile -t ${{ env.TEST_IMAGE_TAG }} .
-          else
-            echo "Creating minimal test Dockerfile..."
-            cat > Dockerfile.test << 'EOF'
-        FROM python:3.11-slim
-        WORKDIR /app
-        COPY requirements/ ./requirements/
-        RUN pip install --no-cache-dir -r requirements/base.txt -r requirements/test.txt 2>/dev/null || \
-            pip install pytest pytest-cov
-        COPY . .
-        CMD ["python", "-m", "pytest", "-v"]
-        EOF
-            docker build -f Dockerfile.test -t ${{ env.TEST_IMAGE_TAG }} .
-          fi
-          
-          echo "✅ Docker build completed"
-        else
-          echo "❌ Docker not available and Kaniko cannot be used"
-          echo "⚠️ Skipping container build - will run tests directly"
-        fi
+        echo "⚠️ Cannot use Kaniko due to permissions"
+        echo "💡 To enable containerized tests, please configure proper RBAC permissions"
+        echo "⚠️ Skipping container build - will run tests directly without container"
     
     - name: 🏥 Setup test environment
       run: |
@@ -577,34 +553,15 @@ jobs:
       run: |
         echo "🔍 Checking build capabilities..."
         
-        # Check for Docker
-        if command -v docker &> /dev/null; then
-          echo "✅ Docker is available"
-          echo "build_method=docker" >> $GITHUB_OUTPUT
-        elif kubectl auth can-i create configmaps --namespace=github-runner 2>/dev/null; then
+        # Check for Kaniko build capability only
+        if kubectl auth can-i create configmaps --namespace=github-runner 2>/dev/null; then
           echo "✅ Can use Kaniko build"
           echo "build_method=kaniko" >> $GITHUB_OUTPUT
         else
-          echo "⚠️ No build method available"
+          echo "⚠️ No build method available - need proper RBAC"
           echo "build_method=none" >> $GITHUB_OUTPUT
         fi
     
-    - name: 🏗️ Build with Docker
-      if: steps.check-build.outputs.build_method == 'docker'
-      run: |
-        echo "🏗️ Building containers with Docker..."
-        
-        # Build backend
-        if [ -f "Dockerfile" ]; then
-          docker build -t speecher-backend:${{ github.sha }} .
-          echo "✅ Backend image built"
-        fi
-        
-        # Build frontend
-        if [ -f "docker/react.Dockerfile" ]; then
-          docker build -f docker/react.Dockerfile -t speecher-frontend:${{ github.sha }} .
-          echo "✅ Frontend image built"
-        fi
     
     - name: 🏗️ Build with Kaniko
       if: steps.check-build.outputs.build_method == 'kaniko'
@@ -625,6 +582,5 @@ jobs:
         if [ "${{ steps.check-build.outputs.build_method }}" = "none" ]; then
           echo "⚠️ **Note**: Container builds are currently disabled due to insufficient permissions." >> $GITHUB_STEP_SUMMARY
           echo "To enable container builds, please configure:" >> $GITHUB_STEP_SUMMARY
-          echo "1. Docker daemon on runners, OR" >> $GITHUB_STEP_SUMMARY
-          echo "2. Proper RBAC for Kaniko builds" >> $GITHUB_STEP_SUMMARY
+          echo "- Proper RBAC for Kaniko builds in github-runner namespace" >> $GITHUB_STEP_SUMMARY
         fi

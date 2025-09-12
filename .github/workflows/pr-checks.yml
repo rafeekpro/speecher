@@ -257,7 +257,7 @@ jobs:
           bandit-report.json
 
   container-build:
-    name: 🐳 Container Build Test (nerdctl)
+    name: 🐳 Container Build Test (Kaniko)
     runs-on: [self-hosted, linux, x64, kubernetes]
     needs: changes
     # Run if backend/frontend changed OR if path detection failed

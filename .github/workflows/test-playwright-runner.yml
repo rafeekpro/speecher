@@ -43,7 +43,6 @@ jobs:
     - name: 🧪 Container Tools Check
       run: |
         echo "🐳 Checking container tools..."
-        docker --version || nerdctl --version || echo "❌ No container runtime found"
         kubectl version --client || echo "❌ kubectl not found"
         
     - name: 📥 Checkout Repository

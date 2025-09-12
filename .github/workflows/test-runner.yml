@@ -18,9 +18,7 @@ jobs:
         echo "Runner arch: ${{ runner.arch }}"
         echo "Working directory: $(pwd)"
         echo "Available tools:"
-        # Check containerd tools
-        nerdctl --version || echo "nerdctl not found"
-        containerd --version || echo "containerd not found"
+        # Check Kubernetes tools
         kubectl version --client || echo "kubectl not found"
         node --version || echo "Node not found"
         python3 --version || echo "Python not found"
@@ -33,11 +31,11 @@ jobs:
         echo "Repository contents:"
         ls -la
         
-    - name: Test containerd functionality
+    - name: Test Kubernetes functionality
       run: |
-        echo "Testing containerd functionality..."
-        nerdctl ps || echo "nerdctl ps failed"
-        nerdctl images || echo "nerdctl images failed"
+        echo "Testing Kubernetes functionality..."
+        kubectl get pods --namespace=github-runner || echo "kubectl get pods failed"
+        kubectl get nodes || echo "kubectl get nodes failed"
         
     - name: Test kubectl functionality
       run: |
@@ -46,4 +44,4 @@ jobs:
         kubectl get pods --all-namespaces || echo "kubectl get pods failed"
     
     - name: Success message
-      run: echo "✅ Self-hosted containerd runner is working correctly!"
+      run: echo "✅ Self-hosted Kubernetes runner is working correctly!"

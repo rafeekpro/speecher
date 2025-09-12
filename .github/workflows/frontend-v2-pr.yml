@@ -204,14 +204,96 @@ jobs:
           DOCKERFILE_PATH="/tmp/frontend.Dockerfile"
         fi
         
-        # Build with nerdctl (more K8s-friendly than Docker)
-        echo "🔨 Building container image..."
-        nerdctl build -f "$DOCKERFILE_PATH" -t "speecher-frontend:pr-${{ github.event.pull_request.number }}" . || {
-          echo "❌ Container build failed"
+        # Build with Kaniko in Kubernetes
+        echo "🔨 Building container image with Kaniko..."
+        
+        # Create ConfigMap with Dockerfile
+        kubectl create configmap dockerfile-frontend-${{ github.run_id }} \
+          --from-file=Dockerfile="$DOCKERFILE_PATH" \
+          --namespace=${{ env.KUBE_NAMESPACE }} \
+          --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Create source archive
+        tar czf /tmp/source.tar.gz \
+          --exclude='.git' \
+          --exclude='node_modules' \
+          --exclude='coverage' \
+          --exclude='test_results' \
+          . 2>/dev/null || true
+        
+        kubectl create configmap source-frontend-${{ github.run_id }} \
+          --from-file=source.tar.gz=/tmp/source.tar.gz \
+          --namespace=${{ env.KUBE_NAMESPACE }} \
+          --dry-run=client -o yaml | kubectl apply -f -
+        
+        # Create Kaniko build job
+        cat <<EOF | kubectl apply -f -
+        apiVersion: batch/v1
+        kind: Job
+        metadata:
+          name: kaniko-frontend-${{ github.run_id }}
+          namespace: ${{ env.KUBE_NAMESPACE }}
+        spec:
+          backoffLimit: 1
+          activeDeadlineSeconds: 600
+          template:
+            spec:
+              restartPolicy: Never
+              initContainers:
+              - name: extract-source
+                image: busybox:latest
+                command: ['sh', '-c']
+                args:
+                  - |
+                    cd /workspace
+                    tar xzf /source/source.tar.gz
+                    cp /dockerfile/Dockerfile /workspace/Dockerfile
+                volumeMounts:
+                - name: source
+                  mountPath: /source
+                - name: dockerfile
+                  mountPath: /dockerfile
+                - name: workspace
+                  mountPath: /workspace
+              containers:
+              - name: kaniko
+                image: gcr.io/kaniko-project/executor:latest
+                args:
+                - --dockerfile=/workspace/Dockerfile
+                - --context=/workspace
+                - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
+                - --cache=true
+                - --push=false
+                - --tar-path=/workspace/image.tar
+                volumeMounts:
+                - name: workspace
+                  mountPath: /workspace
+              volumes:
+              - name: source
+                configMap:
+                  name: source-frontend-${{ github.run_id }}
+              - name: dockerfile
+                configMap:
+                  name: dockerfile-frontend-${{ github.run_id }}
+              - name: workspace
+                emptyDir: {}
+        EOF
+        
+        # Wait for build
+        kubectl wait --for=condition=complete job/kaniko-frontend-${{ github.run_id }} \
+          --timeout=600s \
+          --namespace=${{ env.KUBE_NAMESPACE }} || {
+          echo "❌ Kaniko build failed"
+          kubectl logs job/kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --tail=50
           exit 1
         }
         
         echo "✅ Frontend container build completed"
+        
+        # Cleanup
+        kubectl delete job kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
+        kubectl delete configmap dockerfile-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
+        kubectl delete configmap source-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
     
     - name: 🧪 Test Frontend Container
       run: |
@@ -220,14 +302,29 @@ jobs:
         # Test the built container by running it briefly
         echo "🔍 Testing container functionality..."
         
-        # Run container in background for testing
-        CONTAINER_ID=$(nerdctl run -d -p 8080:80 "speecher-frontend:pr-${{ github.event.pull_request.number }}")
+        # Run container test in Kubernetes
+        kubectl run frontend-test-${{ github.run_id }} \
+          --image=speecher-frontend:pr-${{ github.event.pull_request.number }} \
+          --namespace=${{ env.KUBE_NAMESPACE }} \
+          --port=80 \
+          --restart=Never \
+          --labels="app=frontend-test,pr=${{ github.event.pull_request.number }}" || {
+            echo "⚠️ Could not start test pod"
+            CONTAINER_STATUS="warning"
+        }
         
-        if [ -n "$CONTAINER_ID" ]; then
-          echo "📦 Container started with ID: $CONTAINER_ID"
+        if kubectl get pod frontend-test-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} 2>/dev/null; then
+          echo "📦 Test pod started"
           
-          # Wait a moment for container to start
-          sleep 10
+          # Wait for pod to be ready
+          kubectl wait --for=condition=ready pod/frontend-test-${{ github.run_id }} \
+            --timeout=60s --namespace=${{ env.KUBE_NAMESPACE }} || true
+          
+          # Setup port forwarding
+          kubectl port-forward pod/frontend-test-${{ github.run_id }} 8080:80 \
+            --namespace=${{ env.KUBE_NAMESPACE }} &
+          PF_PID=$!
+          sleep 5
           
           # Test if container is responding
           if curl -s -f http://localhost:8080 > /dev/null; then
@@ -240,11 +337,11 @@ jobs:
           
           # Get container logs for debugging
           echo "📋 Container logs:"
-          nerdctl logs "$CONTAINER_ID" --tail=10 || true
+          kubectl logs frontend-test-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --tail=10 || true
           
-          # Stop and cleanup
-          nerdctl stop "$CONTAINER_ID" || true
-          nerdctl rm "$CONTAINER_ID" || true
+          # Stop port forwarding and cleanup
+          kill $PF_PID 2>/dev/null || true
+          kubectl delete pod frontend-test-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
           
           if [ "$CONTAINER_STATUS" = "success" ]; then
             echo "✅ Frontend container test completed successfully"
