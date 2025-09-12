@@ -1,6 +1,7 @@
 """
 Pytest configuration and fixtures for API tests
 """
+
 import os
 import sys
 import tempfile
@@ -220,13 +221,8 @@ def multiple_transcriptions():
 def client():
     """Create a test client for the FastAPI app"""
     # Clear any existing data in the in-memory databases
-    from backend.auth import api_keys_db
-    from backend.auth import rate_limit_db
-    from backend.auth import refresh_tokens_db
-    from backend.auth import users_db
-    from backend.database import projects_db
-    from backend.database import recordings_db
-    from backend.database import tags_db
+    from backend.auth import api_keys_db, rate_limit_db, refresh_tokens_db, users_db
+    from backend.database import projects_db, recordings_db, tags_db
     from backend.main import app
 
     users_db.clear()

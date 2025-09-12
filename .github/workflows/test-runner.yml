@@ -35,7 +35,7 @@ jobs:
       run: |
         echo "Testing Kubernetes functionality..."
         kubectl get pods --namespace=github-runner || echo "kubectl get pods failed"
-        kubectl get nodes || echo "kubectl get nodes failed"
+        # kubectl get nodes requires cluster permissions - skipping
         
     - name: Test kubectl functionality
       run: |

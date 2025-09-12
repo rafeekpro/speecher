@@ -1,9 +1,11 @@
 """Tests for file validation utilities"""
 
-from src.backend.file_validator import AudioFormat
-from src.backend.file_validator import detect_audio_format
-from src.backend.file_validator import get_audio_duration_estimate
-from src.backend.file_validator import validate_audio_file
+from src.backend.file_validator import (
+    AudioFormat,
+    detect_audio_format,
+    get_audio_duration_estimate,
+    validate_audio_file,
+)
 
 
 class TestFileValidator:

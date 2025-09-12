@@ -6,8 +6,7 @@ Unit tests for the api_keys module which manages encrypted API key storage.
 import os
 import unittest
 from datetime import datetime
-from unittest.mock import MagicMock
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 # Import the module to test
 from src.backend.api_keys import APIKeysManager

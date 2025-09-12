@@ -1,7 +1,6 @@
 """Tests for authentication API endpoints"""
 
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import jwt
 from fastapi.testclient import TestClient

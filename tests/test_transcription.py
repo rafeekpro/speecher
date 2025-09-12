@@ -14,9 +14,7 @@ from unittest.mock import patch
 from src.speecher import transcription
 
 # Import test utilities
-from tests.test_utils import get_sample_transcription_data
-from tests.test_utils import save_sample_transcription_to_file
-from tests.test_utils import setup_test_data_dir
+from tests.test_utils import get_sample_transcription_data, save_sample_transcription_to_file, setup_test_data_dir
 
 
 class TestTranscriptionModule(unittest.TestCase):

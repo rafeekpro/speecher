@@ -6,17 +6,13 @@ Unit tests for the Azure module which handles interactions with Azure services.
 import os
 import unittest
 import uuid
-from unittest.mock import MagicMock
-from unittest.mock import mock_open
-from unittest.mock import patch
+from unittest.mock import MagicMock, mock_open, patch
 
 # Import the module to test
 from src.speecher import azure
 
 # Import test utilities - using absolute imports for better compatibility
-from tests.test_utils import create_sample_wav_file
-from tests.test_utils import get_sample_transcription_data
-from tests.test_utils import setup_test_data_dir
+from tests.test_utils import create_sample_wav_file, get_sample_transcription_data, setup_test_data_dir
 
 
 class TestAzureModule(unittest.TestCase):
