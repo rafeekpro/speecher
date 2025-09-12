@@ -252,6 +252,9 @@ jobs:
                     cp /config/Dockerfile /workspace/Dockerfile
                     cp /config/nginx.prod.conf /workspace/nginx.prod.conf
                     
+                    echo "Setting permissions for user 1000..."
+                    chown -R 1000:1000 /workspace
+                    
                     # Verify structure for multi-stage build
                     echo "Build context structure:"
                     ls -la /workspace/

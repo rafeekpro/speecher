@@ -182,10 +182,16 @@ jobs:
                 command: ['sh', '-c']
                 args:
                   - |
+                    echo "Cloning repository..."
                     git clone --depth 1 https://github.com/${{ github.repository }}.git /workspace/context
                     cd /workspace/context
                     git checkout ${{ github.sha }}
                     cp /dockerfile/Dockerfile /workspace/Dockerfile
+                    
+                    echo "Setting permissions for user 1000..."
+                    chown -R 1000:1000 /workspace
+                    
+                    echo "Build context ready"
                 volumeMounts:
                 - name: dockerfile
                   mountPath: /dockerfile
@@ -366,10 +372,16 @@ jobs:
                 command: ['sh', '-c']
                 args:
                   - |
+                    echo "Cloning repository..."
                     git clone --depth 1 https://github.com/${{ github.repository }}.git /workspace/context
                     cd /workspace/context
                     git checkout ${{ github.sha }}
                     cp /dockerfile/Dockerfile /workspace/Dockerfile
+                    
+                    echo "Setting permissions for user 1000..."
+                    chown -R 1000:1000 /workspace
+                    
+                    echo "Build context ready"
                 volumeMounts:
                 - name: dockerfile
                   mountPath: /dockerfile
