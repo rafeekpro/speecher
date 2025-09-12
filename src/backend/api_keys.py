@@ -43,7 +43,7 @@ class APIKeysManager:
         master_key = os.getenv("ENCRYPTION_KEY")
         if not master_key:
             # In production, this should be stored securely
-            master_key = "speecher-default-encryption-key-change-in-production"
+            master_key = "speacher-default-encryption-key-change-in-production"
 
         # Derive a proper key from the master key
         key = base64.urlsafe_b64encode(hashlib.sha256(master_key.encode()).digest())
@@ -140,7 +140,7 @@ class APIKeysManager:
                     "access_key_id": access_key,
                     "secret_access_key": secret_key,
                     "region": os.getenv("AWS_DEFAULT_REGION", "us-east-1"),
-                    "s3_bucket_name": os.getenv("S3_BUCKET_NAME", "speecher-rafal-app"),
+                    "s3_bucket_name": os.getenv("S3_BUCKET_NAME", "speacher-rafal-app"),
                 }
                 return {
                     "provider": "aws",
@@ -167,7 +167,7 @@ class APIKeysManager:
                     keys = {
                         "credentials_json": f.read(),
                         "project_id": os.getenv("GCP_PROJECT_ID"),
-                        "gcs_bucket_name": os.getenv("GCP_BUCKET_NAME", "speecher-gcp"),
+                        "gcs_bucket_name": os.getenv("GCP_BUCKET_NAME", "speacher-gcp"),
                     }
                     return {
                         "provider": "gcp",

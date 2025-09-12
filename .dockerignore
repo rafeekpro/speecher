@@ -33,6 +33,7 @@ ENV/
 # Documentation
 docs/
 *.md
+!README.md
 LICENSE
 
 # Test files
