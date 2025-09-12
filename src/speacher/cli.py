@@ -5,7 +5,7 @@ CLI dla programu transkrypcji audio AWS.
 
 import sys
 
-from speecher.main import main
+from speacher.main import main
 
 if __name__ == "__main__":
     sys.exit(main())

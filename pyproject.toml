@@ -1,5 +1,5 @@
 [project]
-name = "speecher"
+name = "speacher"
 version = "0.1.0"
 description = "Multi-cloud audio transcription service with speaker diarization"
 authors = [
@@ -61,9 +61,9 @@ test = [
 ]
 
 [project.scripts]
-speecher = "speecher.cli:main"
-speecher-api = "backend.main:run_server"
-speecher-ui = "frontend.app:run_app"
+speacher = "speacher.cli:main"
+speacher-api = "backend.main:run_server"
+speacher-ui = "frontend.app:run_app"
 
 [tool.uv]
 dev-dependencies = [

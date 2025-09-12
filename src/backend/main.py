@@ -31,7 +31,7 @@ logger.setLevel(logging.DEBUG)
 env_path = os.getenv("DOTENV_PATH") or find_dotenv()
 load_dotenv(env_path)
 
-# Add parent directory to path to import speecher module
+# Add parent directory to path to import speacher module
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # Import cloud wrappers for missing functions
@@ -45,11 +45,11 @@ from backend.api_v2 import auth_router, projects_router, users_router
 
 # Import streaming module for real-time transcription
 from backend.streaming import handle_websocket_streaming
-from speecher import aws as aws_service
+from speacher import aws as aws_service
 
 # Configuration from environment variables
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-MONGODB_DB = os.getenv("MONGODB_DB", "speecher")
+MONGODB_DB = os.getenv("MONGODB_DB", "speacher")
 MONGODB_COLLECTION = os.getenv("MONGODB_COLLECTION", "transcriptions")
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB limit
 
@@ -57,7 +57,7 @@ MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB limit
 # S3 bucket names are now configured per-provider in the database
 AZURE_STORAGE_ACCOUNT = os.getenv("AZURE_STORAGE_ACCOUNT")
 AZURE_STORAGE_KEY = os.getenv("AZURE_STORAGE_KEY")
-AZURE_CONTAINER_NAME = os.getenv("AZURE_CONTAINER_NAME", "speecher")
+AZURE_CONTAINER_NAME = os.getenv("AZURE_CONTAINER_NAME", "speacher")
 # GCS bucket names are now configured per-provider in the database
 
 # Initialize MongoDB client and collection
@@ -97,7 +97,7 @@ class TranscriptionResponse(BaseModel):
 
 
 app = FastAPI(
-    title="Speecher Transcription API",
+    title="Speacher Transcription API",
     description="Multi-cloud audio transcription service with speaker diarization",
     version="1.2.0",
 )
@@ -120,7 +120,7 @@ app.include_router(projects_router)
 @app.get("/")
 async def root():
     """Root endpoint."""
-    return {"message": "Welcome to Speecher API", "version": "1.0.0"}
+    return {"message": "Welcome to Speacher API", "version": "1.0.0"}
 
 
 @app.get("/providers")
@@ -337,7 +337,7 @@ async def process_aws_transcription(
     bucket_name = actual_bucket_name
 
     # Start transcription job
-    job_name = f"speecher-{uuid.uuid4()}"
+    job_name = f"speacher-{uuid.uuid4()}"
 
     trans_resp = aws_service.start_transcription_job(
         job_name=job_name,
@@ -571,7 +571,7 @@ async def delete_transcription(transcription_id: str):
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy", "service": "Speecher API"}
+    return {"status": "healthy", "service": "Speacher API"}
 
 
 @app.get("/debug/aws-config")
@@ -685,7 +685,7 @@ def process_transcription_data(transcription_data: Dict[str, Any], enable_diariz
         # Process speaker diarization if enabled
         if enable_diarization and "speaker_labels" in results:
             # Use transcription module to properly process speaker segments
-            from speecher import transcription
+            from speacher import transcription
 
             # Process the full transcription data with speaker segments
             processed_segments = []

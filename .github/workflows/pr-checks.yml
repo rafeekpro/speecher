@@ -44,7 +44,7 @@ jobs:
         filters: |
           backend:
             - 'src/backend/**'
-            - 'src/speecher/**'
+            - 'src/speacher/**'
             - 'Dockerfile'
             - 'requirements/*.txt'
             - 'pyproject.toml'
@@ -340,7 +340,7 @@ jobs:
                 args:
                 - --dockerfile=/workspace/context/Dockerfile
                 - --context=dir:///workspace/context
-                - --destination=speecher-backend:pr-${{ github.event.pull_request.number }}
+                - --destination=speacher-backend:pr-${{ github.event.pull_request.number }}
                 - --no-push
                 - --verbosity=info  # Reduced verbosity for cleaner logs
                 volumeMounts:
@@ -567,7 +567,7 @@ jobs:
                 args:
                 - --dockerfile=/workspace/context/docker/react.Dockerfile
                 - --context=dir:///workspace/context
-                - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
+                - --destination=speacher-frontend:pr-${{ github.event.pull_request.number }}
                 - --no-push
                 - --verbosity=info  # Reduced verbosity for cleaner logs
                 volumeMounts:
@@ -685,7 +685,7 @@ jobs:
           serviceAccountName: github-runner  # Use dedicated ServiceAccount
           containers:
           - name: backend
-            image: speecher-backend:pr-${{ github.event.pull_request.number }}
+            image: speacher-backend:pr-${{ github.event.pull_request.number }}
             imagePullPolicy: Never
             command: ["python", "--version"]
             resources:

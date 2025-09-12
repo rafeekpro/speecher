@@ -1,4 +1,4 @@
-# 🎙️ Speecher - Multi-Cloud Speech Transcription Platform
+# 🎙️ Speacher - Multi-Cloud Speech Transcription Platform
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-green.svg)](https://fastapi.tiangolo.com/)
@@ -7,7 +7,7 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Speecher** is a cloud-agnostic speech transcription platform that converts audio files to text with high accuracy. Upload your audio files through the modern React interface or API, choose your preferred cloud provider (AWS, Azure, or Google Cloud), and get accurate transcriptions with speaker identification, timestamps, and multiple export formats.
+**Speacher** is a cloud-agnostic speech transcription platform that converts audio files to text with high accuracy. Upload your audio files through the modern React interface or API, choose your preferred cloud provider (AWS, Azure, or Google Cloud), and get accurate transcriptions with speaker identification, timestamps, and multiple export formats.
 
 Perfect for transcribing meetings, interviews, podcasts, lectures, and any audio content in 11+ languages.
 
@@ -33,8 +33,8 @@ Perfect for transcribing meetings, interviews, podcasts, lectures, and any audio
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/speecher.git
-cd speecher
+git clone https://github.com/yourusername/speacher.git
+cd speacher
 
 # Copy environment template
 cp config/.env.example .env

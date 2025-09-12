@@ -274,7 +274,7 @@ jobs:
                 args:
                 - --dockerfile=/workspace/Dockerfile
                 - --context=dir:///workspace
-                - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
+                - --destination=speacher-frontend:pr-${{ github.event.pull_request.number }}
                 - --no-push
                 - --verbosity=info
                 env:
@@ -590,7 +590,7 @@ jobs:
           serviceAccountName: github-runner
           containers:
           - name: frontend
-            image: speecher-frontend:pr-${{ github.event.pull_request.number }}
+            image: speacher-frontend:pr-${{ github.event.pull_request.number }}
             imagePullPolicy: Never
             ports:
             - containerPort: 8080

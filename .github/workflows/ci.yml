@@ -15,8 +15,8 @@ env:
   MONGODB_POD: 'mongodb-${{ github.run_id }}'
   MONGODB_PORT: '27017'
   # Container image settings
-  TEST_IMAGE_TAG: 'speecher-test:${{ github.sha }}'
-  TEST_IMAGE_LATEST: 'speecher-test:latest'
+  TEST_IMAGE_TAG: 'speacher-test:${{ github.sha }}'
+  TEST_IMAGE_LATEST: 'speacher-test:latest'
   
 jobs:
   # Optimized containerized test job - builds and runs tests in container
