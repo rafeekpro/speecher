@@ -89,19 +89,29 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
         fi
         
-        # Kaniko build job using Git context directly (no source archive needed)
+        # Optimized Kaniko build job using Git context directly
         cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
         metadata:
           name: kaniko-build-${{ github.run_id }}
           namespace: $NAMESPACE
+          labels:
+            app: kaniko-build
+            build-type: test-container
+            test-run: "${{ github.run_id }}"
         spec:
           backoffLimit: 1
           activeDeadlineSeconds: 900
+          ttlSecondsAfterFinished: 3600  # Auto-cleanup after 1 hour
           template:
+            metadata:
+              labels:
+                app: kaniko-build
+                test-run: "${{ github.run_id }}"
             spec:
               restartPolicy: Never
+              serviceAccountName: github-runner  # Use dedicated ServiceAccount
               initContainers:
               - name: prepare-dockerfile
                 image: busybox:latest
@@ -116,16 +126,24 @@ jobs:
                   mountPath: /dockerfile
                 - name: workspace
                   mountPath: /workspace
+                securityContext:
+                  runAsUser: 1000
+                  runAsNonRoot: true
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
                 args:
-                - --dockerfile=/workspace/Dockerfile
+                - --dockerfile=/workspace/context/Dockerfile
                 - --context=git://github.com/${{ github.repository }}.git#${{ github.sha }}
                 - --destination=${{ env.TEST_IMAGE_TAG }}
                 - --destination=${{ env.TEST_IMAGE_LATEST }}
                 - --push=false
                 - --tar-path=/workspace/image.tar
+                - --cache=true
+                - --cache-ttl=24h
+                - --verbosity=info  # Reduced verbosity for cleaner logs
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
@@ -136,6 +154,14 @@ jobs:
                   limits:
                     memory: "2Gi"
                     cpu: "1000m"
+                securityContext:
+                  runAsUser: 1000
+                  runAsNonRoot: true
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop:
+                    - ALL
               volumes:
               - name: dockerfile
                 configMap:
@@ -163,7 +189,172 @@ jobs:
         kubectl delete job kaniko-build-${{ github.run_id }} --namespace=$NAMESPACE --ignore-not-found=true
         kubectl delete configmap dockerfile-test-${{ github.run_id }} --namespace=$NAMESPACE --ignore-not-found=true
     
-    - name: 🏗️ Alternative: Skip container build if no permissions
+    - name: 🔍 Debug Kaniko Test Container Build Failure
+      if: failure()
+      run: |
+        echo "🔍 ====================================="
+        echo "🔍 KANIKO TEST CONTAINER BUILD FAILURE DIAGNOSTICS"
+        echo "🔍 ====================================="
+        
+        # Configuration for this workflow  
+        JOB_NAME="kaniko-build-${{ github.run_id }}"
+        NAMESPACE="${{ steps.check-perms.outputs.use_namespace }}"
+        BUILD_TYPE="test-container"
+        
+        echo "🔍 Job Name: $JOB_NAME"
+        echo "🔍 Namespace: $NAMESPACE"
+        echo "🔍 Build Type: $BUILD_TYPE"
+        echo ""
+        
+        # Step 1: Find the Kaniko pod using job selectors
+        echo "📋 Step 1: Finding Kaniko pod..."
+        echo "==============================="
+        
+        KANIKO_POD=""
+        
+        # Method 1: Find by job-name label
+        KANIKO_POD=$(kubectl get pods -n $NAMESPACE \
+          -l job-name=$JOB_NAME \
+          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+        
+        if [[ -n "$KANIKO_POD" ]]; then
+          echo "✅ Found pod by job-name label: $KANIKO_POD"
+          KANIKO_POD_EXISTS=true
+        else
+          # Method 2: Find by app=kaniko-build label  
+          KANIKO_POD=$(kubectl get pods -n $NAMESPACE \
+            -l app=kaniko-build,test-run="${{ github.run_id }}" \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          
+          if [[ -n "$KANIKO_POD" ]]; then
+            echo "✅ Found pod by app label: $KANIKO_POD"
+            KANIKO_POD_EXISTS=true
+          else
+            echo "❌ No Kaniko pod found!"
+            KANIKO_POD_EXISTS=false
+          fi
+        fi
+        
+        if [[ "$KANIKO_POD_EXISTS" == "false" ]]; then
+          echo "📋 Available pods in namespace $NAMESPACE:"
+          kubectl get pods -n $NAMESPACE --sort-by=.metadata.creationTimestamp
+          echo ""
+          echo "📋 Available jobs in namespace $NAMESPACE:"
+          kubectl get jobs -n $NAMESPACE --sort-by=.metadata.creationTimestamp
+        fi
+        echo ""
+        
+        # Step 2: Job Status and Events
+        echo "📋 Step 2: Job Status and Events"
+        echo "================================"
+        
+        echo "🔍 Job description:"
+        kubectl describe job $JOB_NAME -n $NAMESPACE 2>/dev/null || {
+          echo "❌ Job $JOB_NAME not found"
+          echo "📋 Available jobs:"
+          kubectl get jobs -n $NAMESPACE -o wide
+        }
+        echo ""
+        
+        echo "🔍 Job events:"
+        kubectl get events -n $NAMESPACE \
+          --field-selector involvedObject.name=$JOB_NAME \
+          --sort-by='.lastTimestamp' 2>/dev/null || echo "❌ No job events found"
+        echo ""
+        
+        # Step 3: Pod Diagnostics (if pod exists)
+        if [[ "$KANIKO_POD_EXISTS" == "true" ]]; then
+          echo "📋 Step 3: Pod Diagnostics"
+          echo "=========================="
+          
+          echo "🔍 Pod description:"
+          kubectl describe pod $KANIKO_POD -n $NAMESPACE 2>/dev/null || echo "❌ Pod description failed"
+          echo ""
+          
+          echo "🔍 Pod events:"
+          kubectl get events -n $NAMESPACE \
+            --field-selector involvedObject.name=$KANIKO_POD \
+            --sort-by='.lastTimestamp' 2>/dev/null || echo "❌ No pod events found"
+          echo ""
+        fi
+        
+        # Step 4: Container Logs
+        echo "📋 Step 4: Container Logs"
+        echo "========================="
+        
+        if [[ "$KANIKO_POD_EXISTS" == "true" ]]; then
+          echo "🔍 Init container logs (prepare-dockerfile):"
+          echo "--------------------------------------------"
+          kubectl logs $KANIKO_POD -n $NAMESPACE -c prepare-dockerfile --tail=50 2>/dev/null || {
+            echo "❌ No init container logs available"
+          }
+          echo ""
+          
+          echo "🔍 Kaniko container logs:"
+          echo "-------------------------"
+          kubectl logs $KANIKO_POD -n $NAMESPACE -c kaniko --tail=100 2>/dev/null || {
+            echo "❌ No Kaniko container logs available"
+            echo "🔍 Trying to get logs from any container..."
+            kubectl logs $KANIKO_POD -n $NAMESPACE --all-containers=true --tail=50 2>/dev/null || \
+              echo "❌ Could not retrieve any container logs"
+          }
+          echo ""
+        else
+          echo "⚠️ No pod found - checking job logs directly"
+          kubectl logs job/$JOB_NAME -n $NAMESPACE --tail=100 2>/dev/null || echo "❌ No job logs available"
+          echo ""
+        fi
+        
+        # Step 5: Build Configuration Analysis
+        echo "📋 Step 5: Build Configuration Analysis"
+        echo "======================================="
+        
+        echo "🔍 ConfigMaps related to this build:"
+        kubectl get configmaps -n $NAMESPACE -o name | grep -E "${{ github.run_id }}" | head -5 || \
+          echo "❌ No build-related ConfigMaps found"
+        
+        # Check specific ConfigMap
+        if kubectl get configmap dockerfile-test-${{ github.run_id }} -n $NAMESPACE >/dev/null 2>&1; then
+          echo "✅ Test Dockerfile ConfigMap exists"
+          echo "🔍 ConfigMap contents:"
+          kubectl get configmap dockerfile-test-${{ github.run_id }} -n $NAMESPACE -o yaml | head -20
+        else
+          echo "❌ Test Dockerfile ConfigMap missing"
+        fi
+        echo ""
+        
+        # Step 6: Resource and Permission Check
+        echo "📋 Step 6: Resource and Permission Check"
+        echo "========================================"
+        
+        echo "🔍 Namespace resource summary:"
+        kubectl get pods,jobs,configmaps -n $NAMESPACE --sort-by=.metadata.creationTimestamp | tail -10
+        echo ""
+        
+        echo "🔍 Permission check results:"
+        echo "Can create ConfigMaps: ${{ steps.check-perms.outputs.can_create_configmap }}"
+        echo "Namespace in use: $NAMESPACE"
+        echo ""
+        
+        echo "🔧 Test container build troubleshooting:"
+        echo "1. ❌ Dockerfile creation failed"
+        echo "   - Check if docker/test-optimized.Dockerfile exists"
+        echo "   - Verify fallback Dockerfile creation logic"
+        echo ""
+        echo "2. ❌ Git context access failed"
+        echo "   - Using git://github.com/${{ github.repository }}.git#${{ github.sha }}"
+        echo "   - Check network connectivity and repository access"
+        echo ""
+        echo "3. ❌ Resource constraints"
+        echo "   - Test builds require significant memory for dependency installation"
+        echo "   - Check if build exceeded 2Gi memory limit"
+        echo ""
+        
+        echo "🔍 ============================="
+        echo "🔍 END TEST BUILD FAILURE ANALYSIS"
+        echo "🔍 ============================="
+    
+    - name: 🏗️ Alternative - Skip container build if no permissions
       if: steps.check-perms.outputs.can_create_configmap == 'false'
       run: |
         echo "⚠️ Cannot use Kaniko due to permissions"
