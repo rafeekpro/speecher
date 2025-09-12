@@ -14,8 +14,8 @@ import {
 } from '@mui/material';
 import {
   CheckCircle as CheckIcon,
-  Error as ErrorIcon
-} from '@mui/icons-material';
+  AlertCircle as ErrorIcon
+} from 'lucide-react';
 
 // Context and Layout
 import { AuthProvider } from './contexts/AuthContext';
@@ -130,9 +130,9 @@ const Dashboard: React.FC<{
           <h2 className="text-xl font-semibold mb-2">Backend Status</h2>
           <div className="flex items-center gap-2">
             {backendStatus === 'healthy' ? (
-              <CheckIcon color="success" />
+              <CheckIcon className="text-green-500" size={20} />
             ) : (
-              <ErrorIcon color="error" />
+              <ErrorIcon className="text-red-500" size={20} />
             )}
             <span className={backendStatus === 'healthy' ? 'text-green-600' : 'text-red-600'}>
               {backendStatus === 'healthy' ? 'Connected' : 'Disconnected'}
