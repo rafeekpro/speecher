@@ -54,14 +54,9 @@ jobs:
       id: cache-check
       run: |
         echo "Checking for cached test image in cluster..."
-        # Check if image exists in cluster's containerd namespace
-        if kubectl get nodes -o jsonpath='{.items[0].status.images[*].names[*]}' 2>/dev/null | grep -q "speecher-test:latest"; then
-          echo "cached=true" >> $GITHUB_OUTPUT
-          echo "✅ Found cached test image in cluster"
-        else
-          echo "cached=false" >> $GITHUB_OUTPUT
-          echo "📦 No cached image found, will build fresh"
-        fi
+        # Skip node-level image check as it requires cluster-admin permissions
+        echo "cached=false" >> $GITHUB_OUTPUT
+        echo "📦 Will build fresh test image"
     
     - name: 🏗️ Build optimized test container with Kaniko
       if: steps.check-perms.outputs.can_create_configmap == 'true'
@@ -70,7 +65,7 @@ jobs:
         
         NAMESPACE="${{ steps.check-perms.outputs.use_namespace }}"
         
-        # Create Dockerfile ConfigMap instead of entire directory
+        # Create Dockerfile ConfigMap (small file only)
         echo "📄 Creating Dockerfile ConfigMap..."
         if [ -f "docker/test-optimized.Dockerfile" ]; then
           kubectl create configmap dockerfile-test-${{ github.run_id }} \
@@ -94,25 +89,7 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
         fi
         
-        # Create essential files ConfigMap (requirements, scripts, source)
-        echo "📦 Creating source code archive..."
-        tar czf /tmp/source.tar.gz \
-          --exclude='.git' \
-          --exclude='node_modules' \
-          --exclude='__pycache__' \
-          --exclude='*.pyc' \
-          --exclude='.pytest_cache' \
-          --exclude='coverage' \
-          --exclude='test_results' \
-          . 2>/dev/null || true
-        
-        # Create ConfigMap from archive (smaller than entire directory)
-        kubectl create configmap source-archive-${{ github.run_id }} \
-          --from-file=source.tar.gz=/tmp/source.tar.gz \
-          --namespace=$NAMESPACE \
-          --dry-run=client -o yaml | kubectl apply -f -
-        
-        # Kaniko build job with init container to extract source
+        # Kaniko build job using Git context directly (no source archive needed)
         cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
@@ -126,19 +103,15 @@ jobs:
             spec:
               restartPolicy: Never
               initContainers:
-              - name: extract-source
+              - name: prepare-dockerfile
                 image: busybox:latest
                 command: ['sh', '-c']
                 args:
                   - |
-                    echo "Extracting source archive..."
-                    cd /workspace
-                    tar xzf /source/source.tar.gz
+                    echo "Preparing Dockerfile..."
                     cp /dockerfile/Dockerfile /workspace/Dockerfile
-                    echo "Source extracted successfully"
+                    echo "Dockerfile ready"
                 volumeMounts:
-                - name: source-archive
-                  mountPath: /source
                 - name: dockerfile
                   mountPath: /dockerfile
                 - name: workspace
@@ -148,7 +121,7 @@ jobs:
                 image: gcr.io/kaniko-project/executor:latest
                 args:
                 - --dockerfile=/workspace/Dockerfile
-                - --context=/workspace
+                - --context=git://github.com/${{ github.repository }}.git#${{ github.sha }}
                 - --destination=${{ env.TEST_IMAGE_TAG }}
                 - --destination=${{ env.TEST_IMAGE_LATEST }}
                 - --cache=true
@@ -166,9 +139,6 @@ jobs:
                     memory: "2Gi"
                     cpu: "1000m"
               volumes:
-              - name: source-archive
-                configMap:
-                  name: source-archive-${{ github.run_id }}
               - name: dockerfile
                 configMap:
                   name: dockerfile-test-${{ github.run_id }}
@@ -186,7 +156,6 @@ jobs:
           # Cleanup on failure
           kubectl delete job kaniko-build-${{ github.run_id }} --namespace=$NAMESPACE --ignore-not-found=true
           kubectl delete configmap dockerfile-test-${{ github.run_id }} --namespace=$NAMESPACE --ignore-not-found=true
-          kubectl delete configmap source-archive-${{ github.run_id }} --namespace=$NAMESPACE --ignore-not-found=true
           exit 1
         }
         
@@ -195,7 +164,6 @@ jobs:
         # Cleanup build resources
         kubectl delete job kaniko-build-${{ github.run_id }} --namespace=$NAMESPACE --ignore-not-found=true
         kubectl delete configmap dockerfile-test-${{ github.run_id }} --namespace=$NAMESPACE --ignore-not-found=true
-        kubectl delete configmap source-archive-${{ github.run_id }} --namespace=$NAMESPACE --ignore-not-found=true
     
     - name: 🏗️ Alternative: Skip container build if no permissions
       if: steps.check-perms.outputs.can_create_configmap == 'false'
@@ -250,8 +218,8 @@ jobs:
         
         NAMESPACE="${{ steps.check-perms.outputs.use_namespace }}"
         
-        # Check if we have a test container
-        if kubectl get nodes -o jsonpath='{.items[0].status.images[*].names[*]}' 2>/dev/null | grep -q "${{ env.TEST_IMAGE_TAG }}"; then
+        # Check if we built a test container (based on previous step)
+        if [ "${{ steps.check-perms.outputs.can_create_configmap }}" = "true" ]; then
           echo "📦 Using containerized tests..."
           
           # Run tests in container
