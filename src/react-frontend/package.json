@@ -21,9 +21,16 @@
   },
   "scripts": {
     "start": "react-scripts start",
-    "build": "react-scripts build",
+    "build": "GENERATE_SOURCEMAP=false INLINE_RUNTIME_CHUNK=false react-scripts build",
+    "build:prod": "NODE_ENV=production GENERATE_SOURCEMAP=false INLINE_RUNTIME_CHUNK=false BUILD_PATH=build react-scripts build",
+    "build:analyze": "npm run build:prod && npx serve -s build -l 3000",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "test:coverage": "react-scripts test --coverage --watchAll=false",
+    "test:ci": "CI=true react-scripts test --coverage --watchAll=false --passWithNoTests",
+    "eject": "react-scripts eject",
+    "lint": "eslint src/ --ext .js,.jsx --max-warnings 0",
+    "lint:fix": "eslint src/ --ext .js,.jsx --fix",
+    "serve": "serve -s build -l 3000"
   },
   "eslintConfig": {
     "extends": [

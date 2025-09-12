@@ -191,47 +191,24 @@ jobs:
       run: |
         echo "🏗️ Building frontend container for PR ${{ github.event.pull_request.number }}..."
         
-        # Create a minimal Dockerfile inline via ConfigMap
-        echo "📄 Creating inline Dockerfile via ConfigMap..."
+        # Use the optimized Dockerfile from the repo instead of inline
+        echo "📄 Using optimized production Dockerfile..."
         
-        cat <<'DOCKERFILE_EOF' > /tmp/frontend.Dockerfile
-        # Minimal nginx container for pre-built React frontend
-        FROM nginx:alpine
-        
-        # Copy pre-built frontend files
-        COPY ./build/ /usr/share/nginx/html/
-        
-        # Create nginx config for React routing
-        RUN echo 'server { \
-            listen 80; \
-            server_name localhost; \
-            root /usr/share/nginx/html; \
-            index index.html; \
-            location / { \
-                try_files \$uri \$uri/ /index.html; \
-            } \
-            location /api { \
-                proxy_pass http://backend:8000; \
-                proxy_set_header Host \$host; \
-                proxy_set_header X-Real-IP \$remote_addr; \
-            } \
-        }' > /etc/nginx/conf.d/default.conf
-        
-        EXPOSE 80
-        HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-          CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
-        CMD ["nginx", "-g", "daemon off;"]
-        DOCKERFILE_EOF
-        
-        # Create ConfigMap with Dockerfile
+        # Create ConfigMap with optimized Dockerfile and nginx config
         kubectl create configmap kaniko-dockerfile-${{ github.run_id }} \
-          --from-file=Dockerfile=/tmp/frontend.Dockerfile \
+          --from-file=Dockerfile=./docker/react.Dockerfile \
+          --from-file=nginx.prod.conf=./docker/nginx.prod.conf \
           --namespace=${{ env.KUBE_NAMESPACE }}
         
-        # Create a tarball of the built frontend files
+        # Create a tarball of the entire source for proper multi-stage build
         echo "📦 Creating build context tarball..."
-        cd ${{ env.FRONTEND_DIR }}
-        tar -czf /tmp/build-context.tar.gz -C . build/
+        tar -czf /tmp/build-context.tar.gz \
+          --exclude=node_modules \
+          --exclude=.git \
+          --exclude=coverage \
+          --exclude=build \
+          --exclude=dist \
+          ./src/react-frontend ./docker
         
         # Create ConfigMap with build context
         kubectl create configmap kaniko-context-${{ github.run_id }} \
@@ -241,19 +218,29 @@ jobs:
         # Build with Kaniko in Kubernetes
         echo "🔨 Building container image with Kaniko..."
         
-        # Create Kaniko build job
+        # Create optimized Kaniko build job
         cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
         metadata:
           name: kaniko-frontend-${{ github.run_id }}
           namespace: ${{ env.KUBE_NAMESPACE }}
+          labels:
+            app: kaniko-build
+            build-type: container
+            component: frontend
         spec:
           backoffLimit: 2
           activeDeadlineSeconds: 600
+          ttlSecondsAfterFinished: 3600  # Auto-cleanup after 1 hour
           template:
+            metadata:
+              labels:
+                app: kaniko-build
+                component: frontend
             spec:
               restartPolicy: Never
+              serviceAccountName: github-runner  # Use dedicated ServiceAccount
               initContainers:
               - name: prepare-build-context
                 image: busybox:latest
@@ -263,13 +250,16 @@ jobs:
                     echo "Preparing build context..."
                     # Extract the Dockerfile from ConfigMap
                     cp /config/Dockerfile /workspace/Dockerfile
+                    cp /config/nginx.prod.conf /workspace/nginx.prod.conf
                     
                     # Extract the build context tarball
                     tar -xzf /context/context.tar.gz -C /workspace/
                     
-                    echo "Build context prepared"
-                    ls -la /workspace/ | head -10
-                    ls -la /workspace/build/ | head -10
+                    # Ensure proper structure for multi-stage build
+                    ls -la /workspace/
+                    echo "Build context structure:"
+                    find /workspace -type f -name "*.json" | head -5
+                    find /workspace -type d -name "src" | head -5
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
@@ -277,6 +267,11 @@ jobs:
                   mountPath: /config
                 - name: context-config
                   mountPath: /context
+                securityContext:
+                  runAsUser: 1000
+                  runAsNonRoot: true
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
@@ -287,9 +282,32 @@ jobs:
                 - --no-push
                 - --cache=true
                 - --cache-ttl=24h
+                - --cache-repo=speecher-frontend-cache
+                - --cache-copy-layers=true
+                - --compressed-caching=false
+                - --use-new-run=true
+                - --verbosity=info
+                env:
+                - name: DOCKER_CONFIG
+                  value: /tmp/.docker
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
+                resources:
+                  requests:
+                    memory: "1Gi"
+                    cpu: "500m"
+                  limits:
+                    memory: "2Gi"
+                    cpu: "1000m"
+                securityContext:
+                  runAsUser: 1000
+                  runAsNonRoot: true
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop:
+                    - ALL
               volumes:
               - name: workspace
                 emptyDir: {}
@@ -321,6 +339,175 @@ jobs:
         kubectl delete configmap kaniko-dockerfile-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
         kubectl delete configmap kaniko-context-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
     
+    - name: 🔍 Debug Frontend Kaniko Build Failure
+      if: failure()
+      run: |
+        echo "🔍 ====================================="
+        echo "🔍 FRONTEND KANIKO BUILD FAILURE DIAGNOSTICS"
+        echo "🔍 ====================================="
+        
+        # Configuration for this workflow
+        JOB_NAME="kaniko-frontend-${{ github.run_id }}"
+        NAMESPACE="${{ env.KUBE_NAMESPACE }}"
+        BUILD_TYPE="frontend"
+        
+        echo "🔍 Job Name: $JOB_NAME"
+        echo "🔍 Namespace: $NAMESPACE"
+        echo "🔍 Build Type: $BUILD_TYPE"
+        echo ""
+        
+        # Step 1: Find the Kaniko pod using job selectors
+        echo "📋 Step 1: Finding Kaniko pod..."
+        echo "==============================="
+        
+        KANIKO_POD=""
+        
+        # Method 1: Find by job-name label
+        KANIKO_POD=$(kubectl get pods -n $NAMESPACE \
+          -l job-name=$JOB_NAME \
+          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+        
+        if [[ -n "$KANIKO_POD" ]]; then
+          echo "✅ Found pod by job-name label: $KANIKO_POD"
+          KANIKO_POD_EXISTS=true
+        else
+          # Method 2: Find by app=kaniko-build label
+          KANIKO_POD=$(kubectl get pods -n $NAMESPACE \
+            -l app=kaniko-build,component=frontend \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          
+          if [[ -n "$KANIKO_POD" ]]; then
+            echo "✅ Found pod by app label: $KANIKO_POD"
+            KANIKO_POD_EXISTS=true
+          else
+            echo "❌ No Kaniko pod found!"
+            KANIKO_POD_EXISTS=false
+          fi
+        fi
+        
+        if [[ "$KANIKO_POD_EXISTS" == "false" ]]; then
+          echo "📋 Available pods in namespace $NAMESPACE:"
+          kubectl get pods -n $NAMESPACE --sort-by=.metadata.creationTimestamp
+          echo ""
+          echo "📋 Available jobs in namespace $NAMESPACE:"
+          kubectl get jobs -n $NAMESPACE --sort-by=.metadata.creationTimestamp
+        fi
+        echo ""
+        
+        # Step 2: Job Status and Events
+        echo "📋 Step 2: Job Status and Events"
+        echo "================================"
+        
+        echo "🔍 Job description:"
+        kubectl describe job $JOB_NAME -n $NAMESPACE 2>/dev/null || {
+          echo "❌ Job $JOB_NAME not found"
+          echo "📋 Available jobs:"
+          kubectl get jobs -n $NAMESPACE -o wide | grep -E "(kaniko|frontend|build)" || echo "No build jobs found"
+        }
+        echo ""
+        
+        echo "🔍 Job events:"
+        kubectl get events -n $NAMESPACE \
+          --field-selector involvedObject.name=$JOB_NAME \
+          --sort-by='.lastTimestamp' 2>/dev/null || echo "❌ No job events found"
+        echo ""
+        
+        # Step 3: Pod Diagnostics (if pod exists)
+        if [[ "$KANIKO_POD_EXISTS" == "true" ]]; then
+          echo "📋 Step 3: Pod Diagnostics"
+          echo "=========================="
+          
+          echo "🔍 Pod description:"
+          kubectl describe pod $KANIKO_POD -n $NAMESPACE 2>/dev/null || echo "❌ Pod description failed"
+          echo ""
+          
+          echo "🔍 Pod status:"
+          kubectl get pod $KANIKO_POD -n $NAMESPACE -o wide 2>/dev/null || echo "❌ Pod status failed"
+          echo ""
+          
+          echo "🔍 Pod events:"
+          kubectl get events -n $NAMESPACE \
+            --field-selector involvedObject.name=$KANIKO_POD \
+            --sort-by='.lastTimestamp' 2>/dev/null || echo "❌ No pod events found"
+          echo ""
+        fi
+        
+        # Step 4: Container Logs
+        echo "📋 Step 4: Container Logs"
+        echo "========================="
+        
+        if [[ "$KANIKO_POD_EXISTS" == "true" ]]; then
+          echo "🔍 Init container logs (prepare-build-context):"
+          echo "------------------------------------------------"
+          kubectl logs $KANIKO_POD -n $NAMESPACE -c prepare-build-context --tail=50 2>/dev/null || {
+            echo "❌ No init container logs available"
+          }
+          echo ""
+          
+          echo "🔍 Kaniko container logs:"
+          echo "-------------------------"
+          kubectl logs $KANIKO_POD -n $NAMESPACE -c kaniko --tail=100 2>/dev/null || {
+            echo "❌ No Kaniko container logs available"
+            echo "🔍 Trying to get logs from any container..."
+            kubectl logs $KANIKO_POD -n $NAMESPACE --all-containers=true --tail=50 2>/dev/null || \
+              echo "❌ Could not retrieve any container logs"
+          }
+          echo ""
+        else
+          echo "⚠️ No pod found - checking job logs directly"
+          kubectl logs job/$JOB_NAME -n $NAMESPACE --tail=100 2>/dev/null || echo "❌ No job logs available"
+          echo ""
+        fi
+        
+        # Step 5: ConfigMaps and Build Context
+        echo "📋 Step 5: Build Context and ConfigMaps"
+        echo "======================================="
+        
+        echo "🔍 ConfigMaps related to this build:"
+        kubectl get configmaps -n $NAMESPACE -o name | grep -E "${{ github.run_id }}" | head -5 || \
+          echo "❌ No build-related ConfigMaps found"
+        
+        # Check if Dockerfile ConfigMap exists
+        if kubectl get configmap kaniko-dockerfile-${{ github.run_id }} -n $NAMESPACE >/dev/null 2>&1; then
+          echo "✅ Dockerfile ConfigMap exists"
+        else
+          echo "❌ Dockerfile ConfigMap missing"
+        fi
+        
+        # Check if context ConfigMap exists
+        if kubectl get configmap kaniko-context-${{ github.run_id }} -n $NAMESPACE >/dev/null 2>&1; then
+          echo "✅ Build context ConfigMap exists"
+        else
+          echo "❌ Build context ConfigMap missing"
+        fi
+        echo ""
+        
+        # Step 6: Troubleshooting Hints for Frontend
+        echo "📋 Step 6: Frontend-Specific Troubleshooting"
+        echo "==========================================="
+        
+        echo "🔧 Common frontend build failures:"
+        echo "1. ❌ Node.js build process failed"
+        echo "   - Check package.json and dependencies"
+        echo "   - Verify build scripts and environment variables"
+        echo ""
+        echo "2. ❌ Multi-stage Docker build issues"
+        echo "   - Check if react.Dockerfile exists and is valid"
+        echo "   - Verify nginx configuration"
+        echo ""
+        echo "3. ❌ Build context preparation failed"
+        echo "   - Check if source files were properly extracted"
+        echo "   - Verify tarball creation and extraction"
+        echo ""
+        echo "4. ❌ Resource constraints"
+        echo "   - Frontend builds can be memory-intensive"
+        echo "   - Check if build exceeded memory/CPU limits"
+        echo ""
+        
+        echo "🔍 =============================="
+        echo "🔍 END FRONTEND FAILURE ANALYSIS"
+        echo "🔍 =============================="
+    
     - name: 🧪 Test Frontend Container
       run: |
         echo "🧪 Testing frontend container..."
@@ -328,16 +515,45 @@ jobs:
         # Test the built container by running it briefly
         echo "🔍 Testing container functionality..."
         
-        # Run container test in Kubernetes
-        kubectl run frontend-test-${{ github.run_id }} \
-          --image=speecher-frontend:pr-${{ github.event.pull_request.number }} \
-          --namespace=${{ env.KUBE_NAMESPACE }} \
-          --port=80 \
-          --restart=Never \
-          --labels="app=frontend-test,pr=${{ github.event.pull_request.number }}" || {
-            echo "⚠️ Could not start test pod"
-            CONTAINER_STATUS="warning"
-        }
+        # Run container test in Kubernetes with enhanced security
+        cat <<EOF | kubectl apply -f -
+        apiVersion: v1
+        kind: Pod
+        metadata:
+          name: frontend-test-${{ github.run_id }}
+          namespace: ${{ env.KUBE_NAMESPACE }}
+          labels:
+            app: frontend-test
+            component: frontend
+            pr: "${{ github.event.pull_request.number }}"
+        spec:
+          restartPolicy: Never
+          serviceAccountName: github-runner
+          containers:
+          - name: frontend
+            image: speecher-frontend:pr-${{ github.event.pull_request.number }}
+            imagePullPolicy: Never
+            ports:
+            - containerPort: 8080
+            env:
+            - name: NODE_ENV
+              value: "production"
+            resources:
+              requests:
+                memory: "128Mi"
+                cpu: "100m"
+              limits:
+                memory: "256Mi"
+                cpu: "200m"
+            securityContext:
+              runAsUser: 1000
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop:
+                - ALL
+        EOF
         
         if kubectl get pod frontend-test-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} 2>/dev/null; then
           echo "📦 Test pod started"
@@ -346,18 +562,38 @@ jobs:
           kubectl wait --for=condition=ready pod/frontend-test-${{ github.run_id }} \
             --timeout=60s --namespace=${{ env.KUBE_NAMESPACE }} || true
           
-          # Setup port forwarding
-          kubectl port-forward pod/frontend-test-${{ github.run_id }} 8080:80 \
+          # Setup port forwarding to the correct port
+          kubectl port-forward pod/frontend-test-${{ github.run_id }} 8080:8080 \
             --namespace=${{ env.KUBE_NAMESPACE }} &
           PF_PID=$!
           sleep 5
           
-          # Test if container is responding
-          if curl -s -f http://localhost:8080 > /dev/null; then
-            echo "✅ Frontend container test successful - HTTP response OK"
+          # Test if container is responding with comprehensive checks
+          echo "🔍 Testing container health..."
+          sleep 10  # Allow more time for container startup
+          
+          # Test health endpoint
+          if curl -s -f http://localhost:8080/health > /dev/null; then
+            echo "✅ Health check passed"
+            HEALTH_STATUS="success"
+          else
+            echo "⚠️ Health check failed"
+            HEALTH_STATUS="warning"
+          fi
+          
+          # Test main application
+          if curl -s -f http://localhost:8080 | grep -q "<title>"; then
+            echo "✅ Frontend application responding with HTML"
+            APP_STATUS="success"
+          else
+            echo "⚠️ Frontend application not responding correctly"
+            APP_STATUS="warning"
+          fi
+          
+          # Overall status
+          if [ "$HEALTH_STATUS" = "success" ] && [ "$APP_STATUS" = "success" ]; then
             CONTAINER_STATUS="success"
           else
-            echo "⚠️ Frontend container test failed - No HTTP response"
             CONTAINER_STATUS="warning"
           fi
           

@@ -285,7 +285,7 @@ jobs:
         
         # No need for ConfigMap - using Git clone in init container
         
-        # Backend build job with Kaniko
+        # Backend build job with optimized Kaniko configuration
         cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
@@ -293,13 +293,21 @@ jobs:
           name: backend-build-pr-${{ github.event.pull_request.number }}
           namespace: github-runner
           labels:
+            app: kaniko-build
+            build-type: container
             pr-number: "${{ github.event.pull_request.number }}"
         spec:
           backoffLimit: 2
           activeDeadlineSeconds: 900
+          ttlSecondsAfterFinished: 3600  # Auto-cleanup after 1 hour
           template:
+            metadata:
+              labels:
+                app: kaniko-build
+                pr-number: "${{ github.event.pull_request.number }}"
             spec:
               restartPolicy: Never
+              serviceAccountName: github-runner  # Use dedicated ServiceAccount
               initContainers:
               - name: prepare-build-context
                 image: alpine/git:latest
@@ -312,6 +320,11 @@ jobs:
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
+                securityContext:
+                  runAsUser: 1000
+                  runAsNonRoot: true
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
@@ -320,7 +333,9 @@ jobs:
                 - --context=dir:///workspace/context
                 - --destination=speecher-backend:pr-${{ github.event.pull_request.number }}
                 - --no-push
-                - --verbosity=debug
+                - --cache=true
+                - --cache-ttl=24h
+                - --verbosity=info  # Reduced verbosity for cleaner logs
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
@@ -331,6 +346,14 @@ jobs:
                   limits:
                     memory: "2Gi"
                     cpu: "1000m"
+                securityContext:
+                  runAsUser: 1000
+                  runAsNonRoot: true
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop:
+                    - ALL
               volumes:
               - name: workspace
                 emptyDir: {}
@@ -351,6 +374,130 @@ jobs:
         # Cleanup backend job
         kubectl delete job backend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
     
+    - name: 🔍 Debug Backend Kaniko Build Failure
+      if: failure()
+      run: |
+        echo "🔍 ===================================="
+        echo "🔍 KANIKO BUILD FAILURE DIAGNOSTICS"
+        echo "🔍 ===================================="
+        
+        # Configuration for this workflow
+        JOB_NAME="backend-build-pr-${{ github.event.pull_request.number }}"
+        NAMESPACE="github-runner"
+        BUILD_TYPE="backend"
+        
+        echo "🔍 Job Name: $JOB_NAME"
+        echo "🔍 Namespace: $NAMESPACE"
+        echo "🔍 Build Type: $BUILD_TYPE"
+        echo ""
+        
+        # Step 1: Find the Kaniko pod using job selectors
+        echo "📋 Step 1: Finding Kaniko pod..."
+        echo "==============================="
+        
+        KANIKO_POD=""
+        
+        # Method 1: Find by job-name label
+        if [[ -z "$KANIKO_POD" ]]; then
+          KANIKO_POD=$(kubectl get pods -n $NAMESPACE \
+            -l job-name=$JOB_NAME \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          [[ -n "$KANIKO_POD" ]] && echo "✅ Found pod by job-name label: $KANIKO_POD"
+        fi
+        
+        # Method 2: Find by app=kaniko-build label
+        if [[ -z "$KANIKO_POD" ]]; then
+          KANIKO_POD=$(kubectl get pods -n $NAMESPACE \
+            -l app=kaniko-build,pr-number="${{ github.event.pull_request.number }}" \
+            -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          [[ -n "$KANIKO_POD" ]] && echo "✅ Found pod by app label: $KANIKO_POD"
+        fi
+        
+        if [[ -z "$KANIKO_POD" ]]; then
+          echo "❌ No Kaniko pod found!"
+          echo "📋 Available pods in namespace $NAMESPACE:"
+          kubectl get pods -n $NAMESPACE --sort-by=.metadata.creationTimestamp
+          echo ""
+          echo "📋 Available jobs in namespace $NAMESPACE:"
+          kubectl get jobs -n $NAMESPACE --sort-by=.metadata.creationTimestamp
+          KANIKO_POD_EXISTS=false
+        else
+          echo "✅ Using Kaniko pod: $KANIKO_POD"
+          KANIKO_POD_EXISTS=true
+        fi
+        echo ""
+        
+        # Step 2: Job Status and Events
+        echo "📋 Step 2: Job Status and Events"
+        echo "================================"
+        
+        echo "🔍 Job description:"
+        kubectl describe job $JOB_NAME -n $NAMESPACE 2>/dev/null || {
+          echo "❌ Job $JOB_NAME not found"
+          echo "📋 Available jobs:"
+          kubectl get jobs -n $NAMESPACE -o wide
+        }
+        echo ""
+        
+        echo "🔍 Job events:"
+        kubectl get events -n $NAMESPACE \
+          --field-selector involvedObject.name=$JOB_NAME \
+          --sort-by='.lastTimestamp' 2>/dev/null || echo "❌ No job events found"
+        echo ""
+        
+        # Step 3: Pod Diagnostics
+        if [[ "$KANIKO_POD_EXISTS" == "true" ]]; then
+          echo "📋 Step 3: Pod Diagnostics"
+          echo "=========================="
+          
+          echo "🔍 Pod description:"
+          kubectl describe pod $KANIKO_POD -n $NAMESPACE 2>/dev/null || echo "❌ Pod description failed"
+          echo ""
+          
+          echo "🔍 Pod events:"
+          kubectl get events -n $NAMESPACE \
+            --field-selector involvedObject.name=$KANIKO_POD \
+            --sort-by='.lastTimestamp' 2>/dev/null || echo "❌ No pod events found"
+          echo ""
+        fi
+        
+        # Step 4: Container Logs
+        echo "📋 Step 4: Container Logs"
+        echo "=========================="
+        
+        if [[ "$KANIKO_POD_EXISTS" == "true" ]]; then
+          echo "🔍 Init container logs (prepare-build-context):"
+          echo "------------------------------------------------"
+          kubectl logs $KANIKO_POD -n $NAMESPACE -c prepare-build-context --tail=50 2>/dev/null || {
+            echo "❌ No init container logs available"
+          }
+          echo ""
+          
+          echo "🔍 Kaniko container logs:"
+          echo "-------------------------"
+          kubectl logs $KANIKO_POD -n $NAMESPACE -c kaniko --tail=100 2>/dev/null || {
+            echo "❌ No Kaniko container logs available"
+            kubectl logs $KANIKO_POD -n $NAMESPACE --all-containers=true --tail=50 2>/dev/null || \
+              echo "❌ Could not retrieve any container logs"
+          }
+        else
+          echo "⚠️ No pod found - checking job logs directly"
+          kubectl logs job/$JOB_NAME -n $NAMESPACE --tail=100 2>/dev/null || echo "❌ No job logs available"
+        fi
+        echo ""
+        
+        # Step 5: Resource Status
+        echo "📋 Step 5: Resource Status"
+        echo "=========================="
+        
+        echo "🔍 Recent resources in namespace:"
+        kubectl get pods,jobs,configmaps -n $NAMESPACE --sort-by=.metadata.creationTimestamp | tail -10
+        echo ""
+        
+        echo "🔍 ============================="
+        echo "🔍 END KANIKO FAILURE ANALYSIS"
+        echo "🔍 ==============================="
+    
     - name: 🏗️ Build Frontend Container image with Kaniko
       run: |
         echo "🏗️ Building frontend image with Kaniko..."
@@ -358,7 +505,7 @@ jobs:
         if [ -f "docker/react.Dockerfile" ]; then
           # No need for ConfigMap - using Git clone in init container
           
-          # Frontend build job with unique name
+          # Frontend build job with optimized Kaniko configuration
           cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
@@ -366,13 +513,21 @@ jobs:
           name: frontend-build-pr-${{ github.event.pull_request.number }}
           namespace: github-runner
           labels:
+            app: kaniko-build
+            build-type: container
             pr-number: "${{ github.event.pull_request.number }}"
         spec:
           backoffLimit: 2
           activeDeadlineSeconds: 900
+          ttlSecondsAfterFinished: 3600  # Auto-cleanup after 1 hour
           template:
+            metadata:
+              labels:
+                app: kaniko-build
+                pr-number: "${{ github.event.pull_request.number }}"
             spec:
               restartPolicy: Never
+              serviceAccountName: github-runner  # Use dedicated ServiceAccount
               initContainers:
               - name: prepare-build-context
                 image: alpine/git:latest
@@ -385,6 +540,11 @@ jobs:
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
+                securityContext:
+                  runAsUser: 1000
+                  runAsNonRoot: true
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
@@ -393,7 +553,9 @@ jobs:
                 - --context=dir:///workspace/context
                 - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
                 - --no-push
-                - --verbosity=debug
+                - --cache=true
+                - --cache-ttl=24h
+                - --verbosity=info  # Reduced verbosity for cleaner logs
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
@@ -404,6 +566,14 @@ jobs:
                   limits:
                     memory: "2Gi"
                     cpu: "1000m"
+                securityContext:
+                  runAsUser: 1000
+                  runAsNonRoot: true
+                  allowPrivilegeEscalation: false
+                  readOnlyRootFilesystem: true
+                  capabilities:
+                    drop:
+                    - ALL
               volumes:
               - name: workspace
                 emptyDir: {}
@@ -426,11 +596,65 @@ jobs:
           echo "⚠️ Frontend Dockerfile not found, skipping frontend build"
         fi
     
+    - name: 🔍 Debug Frontend Kaniko Build Failure
+      if: failure()
+      run: |
+        echo "🔍 ===================================="
+        echo "🔍 FRONTEND KANIKO BUILD FAILURE DIAGNOSTICS"
+        echo "🔍 ===================================="
+        
+        # Configuration for frontend build
+        JOB_NAME="frontend-build-pr-${{ github.event.pull_request.number }}"
+        NAMESPACE="github-runner"
+        BUILD_TYPE="frontend"
+        
+        echo "🔍 Job Name: $JOB_NAME"
+        echo "🔍 Namespace: $NAMESPACE"
+        echo "🔍 Build Type: $BUILD_TYPE"
+        echo ""
+        
+        # Step 1: Find the Kaniko pod
+        echo "📋 Step 1: Finding Kaniko pod..."
+        echo "==============================="
+        
+        KANIKO_POD=""
+        
+        # Find by job-name label
+        KANIKO_POD=$(kubectl get pods -n $NAMESPACE \
+          -l job-name=$JOB_NAME \
+          -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+        
+        if [[ -n "$KANIKO_POD" ]]; then
+          echo "✅ Found frontend pod: $KANIKO_POD"
+          
+          echo "🔍 Pod description:"
+          kubectl describe pod $KANIKO_POD -n $NAMESPACE 2>/dev/null || echo "❌ Pod description failed"
+          echo ""
+          
+          echo "🔍 Init container logs (prepare-build-context):"
+          kubectl logs $KANIKO_POD -n $NAMESPACE -c prepare-build-context --tail=50 2>/dev/null || \
+            echo "❌ No init container logs"
+          echo ""
+          
+          echo "🔍 Kaniko container logs:"
+          kubectl logs $KANIKO_POD -n $NAMESPACE -c kaniko --tail=100 2>/dev/null || \
+            kubectl logs $KANIKO_POD -n $NAMESPACE --all-containers=true --tail=50 2>/dev/null || \
+            echo "❌ No container logs available"
+        else
+          echo "❌ No frontend Kaniko pod found"
+          echo "📋 Available jobs:"
+          kubectl get jobs -n $NAMESPACE --sort-by=.metadata.creationTimestamp | grep -E "(frontend|build)"
+        fi
+        
+        echo "🔍 ============================="
+        echo "🔍 END FRONTEND FAILURE ANALYSIS"
+        echo "🔍 ==============================="
+    
     - name: 🧪 Test Container Functionality
       run: |
         echo "🧪 Testing Kaniko-built containers..."
         
-        # Test backend container functionality in github-runner namespace
+        # Test backend container functionality with optimized configuration
         echo "🔍 Testing backend container startup..."
         cat <<EOF | kubectl apply -f -
         apiVersion: v1
@@ -439,9 +663,12 @@ jobs:
           name: backend-test-pr-${{ github.event.pull_request.number }}
           namespace: github-runner
           labels:
+            app: container-test
+            test-type: startup
             pr-number: "${{ github.event.pull_request.number }}"
         spec:
           restartPolicy: Never
+          serviceAccountName: github-runner  # Use dedicated ServiceAccount
           containers:
           - name: backend
             image: speecher-backend:pr-${{ github.event.pull_request.number }}
@@ -454,6 +681,14 @@ jobs:
               limits:
                 memory: "256Mi"
                 cpu: "200m"
+            securityContext:
+              runAsUser: 1000
+              runAsNonRoot: true
+              allowPrivilegeEscalation: false
+              readOnlyRootFilesystem: true
+              capabilities:
+                drop:
+                - ALL
         EOF
         
         # Wait for test to complete
