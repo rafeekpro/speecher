@@ -1,16 +1,41 @@
 import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
 
-const PORT = process.env.PORT || 3000;
+// Environment detection
+const isCI = !!process.env.CI;
+const isGitHubActions = !!process.env.GITHUB_ACTIONS;
+const isKubernetes = !!process.env.KUBERNETES_SERVICE_HOST;
+
+// Dynamic port allocation to avoid conflicts
+const DEFAULT_PORT = 3000;
+const CI_PORT_BASE = 4000; // Use different port range in CI
+const getAvailablePort = () => {
+  if (isCI) {
+    // In CI, use a port range less likely to conflict
+    const randomOffset = Math.floor(Math.random() * 1000);
+    return CI_PORT_BASE + randomOffset;
+  }
+  return process.env.PORT ? parseInt(process.env.PORT, 10) : DEFAULT_PORT;
+};
+
+const PORT = getAvailablePort();
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
+
+// Debug logging for troubleshooting
+if (isCI) {
+  console.log(`🎭 Playwright Config - CI Environment Detected`);
+  console.log(`   Environment: CI=${process.env.CI}, GitHub Actions=${isGitHubActions}, Kubernetes=${isKubernetes}`);
+  console.log(`   Port: ${PORT}, Base URL: ${BASE_URL}`);
+  console.log(`   Worker count: 1 (CI optimization)`);
+}
 
 export default defineConfig({
   testDir: './tests',
   testMatch: ['**/*.spec.ts'],
   fullyParallel: false, // Visual tests should run sequentially for consistency
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: 1, // Single worker for visual consistency
+  retries: isCI ? 2 : 0,
+  workers: isCI ? 1 : undefined, // Single worker in CI for consistency, auto-detect locally
   reporter: [
     ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['json', { outputFile: 'test-results/results.json' }],
@@ -54,7 +79,7 @@ export default defineConfig({
             '--disable-web-security',
             '--disable-features=TranslateUI',
             '--disable-ipc-flooding-protection',
-            ...(process.env.CI ? [
+            ...(isCI ? [
               '--no-sandbox',
               '--disable-setuid-sandbox',
               '--disable-dev-shm-usage',
@@ -62,14 +87,17 @@ export default defineConfig({
               '--no-first-run',
               '--no-zygote',
               '--single-process',
-              '--disable-gpu'
+              '--disable-gpu',
+              '--disable-background-timer-throttling',
+              '--disable-backgrounding-occluded-windows',
+              '--disable-renderer-backgrounding'
             ] : [])
           ],
         },
       },
     },
     // Only include other browsers in non-CI environments
-    ...(process.env.CI ? [] : [
+    ...(isCI ? [] : [
       {
         name: 'firefox',
         use: { 
@@ -113,19 +141,21 @@ export default defineConfig({
   ],
 
   webServer: {
-    command: process.env.CI 
-      ? 'npm run build && npx serve -s build -l 3000'
-      : 'npm start',
-    port: Number(PORT),
-    reuseExistingServer: !process.env.CI,
-    timeout: process.env.CI ? 180000 : 120000, // More time for build in CI
+    command: isCI 
+      ? `npm run build && npx serve -s build -l ${PORT}`
+      : `PORT=${PORT} npm start`,
+    url: BASE_URL,
+    reuseExistingServer: true, // Always reuse existing server to avoid conflicts
+    timeout: isCI ? 180000 : 120000, // More time for build in CI
     stdout: 'pipe',
     stderr: 'pipe',
     env: {
       ...process.env,
       BROWSER: 'none', // Prevent react-scripts from opening browser
       HOST: '0.0.0.0', // Bind to all interfaces
+      PORT: String(PORT), // Ensure port is passed to the server
     },
+    ignoreHTTPSErrors: true,
   },
 
   // Visual testing specific configuration

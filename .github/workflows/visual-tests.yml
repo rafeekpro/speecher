@@ -31,10 +31,11 @@ concurrency:
 env:
   # Visual testing environment variables
   FRONTEND_DIR: './src/react-frontend'
-  # Kubernetes namespace for test services
+  # Kubernetes namespace for test services (for future hybrid strategy)
   KUBE_NAMESPACE: 'github-runner'
-  # Test server configuration
-  TEST_SERVER_PORT: '3000'
+  # Test server configuration - let Playwright handle dynamic port allocation
+  CI: 'true'
+  PLAYWRIGHT_BROWSERS_PATH: 0
 
 jobs:
   visual-tests:
@@ -81,50 +82,17 @@ jobs:
           path: ./src/react-frontend/tests/visual/__screenshots__
         continue-on-error: true
 
-      - name: 🚀 Setup Test Environment
+      - name: 🚀 Prepare Test Environment
         working-directory: ${{ env.FRONTEND_DIR }}
         run: |
-          echo "🚀 Setting up test environment for visual testing..."
+          echo "🚀 Preparing environment for visual testing..."
+          echo "   Playwright will manage the test server automatically"
+          echo "   Using improved configuration with dynamic port allocation"
+          echo "   Environment: CI=$CI, GitHub Actions=$GITHUB_ACTIONS"
           
-          # Build the app first
-          echo "🏗️ Building frontend application..."
-          npm run build || {
-            echo "⚠️ Build failed, using development server"
-            npm start &
-            sleep 30
-            echo "✅ Development server ready"
-            exit 0
-          }
-          
-          # Check if we have a build to serve
-          if [ -d "build" ]; then
-            echo "📦 Build artifacts found, using static server..."
-            
-            # Use npx serve for simplicity - no Docker/K8s needed
-            npx serve -s build -l ${{ env.TEST_SERVER_PORT }} &
-            SERVE_PID=$!
-            
-            # Wait for server to be ready
-            echo "⏳ Waiting for static server to start..."
-            sleep 10
-            
-            # Verify server is accessible
-            if curl -s http://localhost:${{ env.TEST_SERVER_PORT }} > /dev/null; then
-              echo "✅ Static test server ready at http://localhost:${{ env.TEST_SERVER_PORT }}"
-            else
-              echo "⚠️ Static server not ready, falling back to dev server"
-              kill $SERVE_PID || true
-              npm start &
-              sleep 30
-            fi
-          else
-            echo "⚠️ No build artifacts, using development server"
-            npm start &
-            sleep 30
-          fi
-          
-          # Final verification
-          timeout 60 bash -c 'until curl -s http://localhost:${{ env.TEST_SERVER_PORT }} > /dev/null; do sleep 2; done' || echo "⚠️ Test server verification failed"
+          # Pre-build the application for faster test startup
+          echo "🏗️ Pre-building frontend application..."
+          npm run build || echo "⚠️ Build failed, Playwright will use dev server"
 
       - name: 🎭 Run visual tests
         id: visual-tests
@@ -144,6 +112,7 @@ jobs:
           fi
         env:
           CI: true
+          GITHUB_ACTIONS: true
           PLAYWRIGHT_BROWSERS_PATH: 0
 
       - name: 📊 Generate visual diff report
@@ -197,9 +166,10 @@ jobs:
         run: |
           echo "🧹 Cleaning up visual test environment..."
           
-          # Kill any background processes
-          pkill -f "npm start" || true
-          pkill -f "npx serve" || true
+          # Kill any remaining Playwright processes
+          pkill -f "playwright" || true
+          pkill -f "npm" || true
+          pkill -f "node" || true
           
           echo "✅ Visual test cleanup completed"
 
