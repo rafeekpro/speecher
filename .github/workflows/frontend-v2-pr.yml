@@ -191,14 +191,57 @@ jobs:
       run: |
         echo "🏗️ Building frontend container for PR ${{ github.event.pull_request.number }}..."
         
-        # Use the simplified nginx Dockerfile for frontend
-        DOCKERFILE_PATH="docker/frontend-nginx.Dockerfile"
-        echo "📄 Using $DOCKERFILE_PATH"
+        # Create a minimal Dockerfile inline via ConfigMap
+        echo "📄 Creating inline Dockerfile via ConfigMap..."
+        
+        cat <<'DOCKERFILE_EOF' > /tmp/frontend.Dockerfile
+        # Minimal nginx container for pre-built React frontend
+        FROM nginx:alpine
+        
+        # Copy pre-built frontend files
+        COPY ./build/ /usr/share/nginx/html/
+        
+        # Create nginx config for React routing
+        RUN echo 'server { \
+            listen 80; \
+            server_name localhost; \
+            root /usr/share/nginx/html; \
+            index index.html; \
+            location / { \
+                try_files \$uri \$uri/ /index.html; \
+            } \
+            location /api { \
+                proxy_pass http://backend:8000; \
+                proxy_set_header Host \$host; \
+                proxy_set_header X-Real-IP \$remote_addr; \
+            } \
+        }' > /etc/nginx/conf.d/default.conf
+        
+        EXPOSE 80
+        HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+          CMD wget --no-verbose --tries=1 --spider http://localhost:80/ || exit 1
+        CMD ["nginx", "-g", "daemon off;"]
+        DOCKERFILE_EOF
+        
+        # Create ConfigMap with Dockerfile
+        kubectl create configmap kaniko-dockerfile-${{ github.run_id }} \
+          --from-file=Dockerfile=/tmp/frontend.Dockerfile \
+          --namespace=${{ env.KUBE_NAMESPACE }}
+        
+        # Create a tarball of the built frontend files
+        echo "📦 Creating build context tarball..."
+        cd ${{ env.FRONTEND_DIR }}
+        tar -czf /tmp/build-context.tar.gz -C . build/
+        
+        # Create ConfigMap with build context
+        kubectl create configmap kaniko-context-${{ github.run_id }} \
+          --from-file=context.tar.gz=/tmp/build-context.tar.gz \
+          --namespace=${{ env.KUBE_NAMESPACE }}
         
         # Build with Kaniko in Kubernetes
         echo "🔨 Building container image with Kaniko..."
         
-        # Create Kaniko build job using Git context directly
+        # Create Kaniko build job
         cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
@@ -213,45 +256,49 @@ jobs:
               restartPolicy: Never
               initContainers:
               - name: prepare-build-context
-                image: alpine/git:latest
+                image: busybox:latest
                 command: ['sh', '-c']
                 args:
                   - |
-                    echo "Cloning repository..."
-                    git clone --depth 1 https://github.com/${{ github.repository }}.git /workspace/context
-                    cd /workspace/context
-                    git checkout ${{ github.sha }}
-                    
                     echo "Preparing build context..."
-                    # Copy the frontend-nginx Dockerfile
-                    cp docker/frontend-nginx.Dockerfile /workspace/Dockerfile
+                    # Extract the Dockerfile from ConfigMap
+                    cp /config/Dockerfile /workspace/Dockerfile
                     
-                    # Build the frontend first
-                    apk add --no-cache nodejs npm
-                    cd src/react-frontend
-                    npm ci
-                    npm run build
-                    cd /workspace/context
+                    # Extract the build context tarball
+                    tar -xzf /context/context.tar.gz -C /workspace/
                     
                     echo "Build context prepared"
-                    ls -la src/react-frontend/build/ | head -10
+                    ls -la /workspace/ | head -10
+                    ls -la /workspace/build/ | head -10
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
+                - name: dockerfile-config
+                  mountPath: /config
+                - name: context-config
+                  mountPath: /context
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
                 args:
                 - --dockerfile=/workspace/Dockerfile
-                - --context=dir:///workspace/context
+                - --context=dir:///workspace
                 - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
                 - --no-push
+                - --cache=true
+                - --cache-ttl=24h
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
               volumes:
               - name: workspace
                 emptyDir: {}
+              - name: dockerfile-config
+                configMap:
+                  name: kaniko-dockerfile-${{ github.run_id }}
+              - name: context-config
+                configMap:
+                  name: kaniko-context-${{ github.run_id }}
         EOF
         
         # Wait for build
@@ -262,6 +309,8 @@ jobs:
           echo "📋 Fetching Kaniko logs..."
           kubectl logs job/kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --all-containers=true --tail=100
           kubectl delete job kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
+          kubectl delete configmap kaniko-dockerfile-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
+          kubectl delete configmap kaniko-context-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
           exit 1
         }
         
@@ -269,6 +318,8 @@ jobs:
         
         # Cleanup
         kubectl delete job kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
+        kubectl delete configmap kaniko-dockerfile-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
+        kubectl delete configmap kaniko-context-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
     
     - name: 🧪 Test Frontend Container
       run: |
