@@ -124,8 +124,6 @@ jobs:
                 - --context=git://github.com/${{ github.repository }}.git#${{ github.sha }}
                 - --destination=${{ env.TEST_IMAGE_TAG }}
                 - --destination=${{ env.TEST_IMAGE_LATEST }}
-                - --cache=true
-                - --cache-ttl=24h
                 - --push=false
                 - --tar-path=/workspace/image.tar
                 volumeMounts:

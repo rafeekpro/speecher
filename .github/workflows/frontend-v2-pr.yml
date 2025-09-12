@@ -246,8 +246,6 @@ jobs:
                 - --context=dir:///workspace/context
                 - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
                 - --no-push
-                - --cache=true
-                - --cache-ttl=24h
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
