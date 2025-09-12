@@ -135,10 +135,10 @@ jobs:
       run: |
         echo "🏗️ Setting up Kubernetes build environment for K3s..."
         
-        # Use github-runner namespace, create unique ConfigMap
-        echo "📦 Creating build context from current directory..."
-        kubectl create configmap build-context-${{ github.run_id }} \
-          --from-file=. \
+        # Create small ConfigMap only for Dockerfile
+        echo "📦 Creating Dockerfile ConfigMap..."
+        kubectl create configmap dockerfile-backend-${{ github.run_id }} \
+          --from-file=Dockerfile=./Dockerfile \
           --namespace=github-runner \
           --dry-run=client -o yaml | kubectl apply -f -
     
@@ -146,7 +146,7 @@ jobs:
       run: |
         echo "🏗️ Building backend image with Kaniko for K3s..."
         
-        # Backend build job with unique name
+        # Backend build job with unique name using Git context
         cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
@@ -156,20 +156,35 @@ jobs:
           labels:
             test-run: "${{ github.run_id }}"
         spec:
+          backoffLimit: 1
+          activeDeadlineSeconds: 600
           template:
             spec:
               restartPolicy: Never
+              initContainers:
+              - name: prepare-dockerfile
+                image: busybox:latest
+                command: ['sh', '-c']
+                args:
+                  - |
+                    cp /dockerfile/Dockerfile /workspace/Dockerfile
+                volumeMounts:
+                - name: dockerfile
+                  mountPath: /dockerfile
+                - name: workspace
+                  mountPath: /workspace
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
                 args:
                 - --dockerfile=/workspace/Dockerfile
-                - --context=/workspace
+                - --context=git://github.com/${{ github.repository }}.git#${{ github.sha }}
                 - --destination=speecher-backend:test
                 - --cache=true
                 - --cache-ttl=24h
+                - --push=false
                 volumeMounts:
-                - name: build-context
+                - name: workspace
                   mountPath: /workspace
                 resources:
                   requests:
@@ -179,9 +194,11 @@ jobs:
                     memory: "2Gi"
                     cpu: "1000m"
               volumes:
-              - name: build-context
+              - name: dockerfile
                 configMap:
-                  name: build-context-${{ github.run_id }}
+                  name: dockerfile-backend-${{ github.run_id }}
+              - name: workspace
+                emptyDir: {}
         EOF
         
         echo "⏳ Waiting for backend build to complete..."
@@ -200,7 +217,13 @@ jobs:
         echo "🏗️ Building frontend image with Kaniko..."
         
         if [ -f "docker/react.Dockerfile" ]; then
-          # Frontend build job with unique name
+          # Create frontend Dockerfile ConfigMap
+          kubectl create configmap dockerfile-frontend-${{ github.run_id }} \
+            --from-file=Dockerfile=./docker/react.Dockerfile \
+            --namespace=github-runner \
+            --dry-run=client -o yaml | kubectl apply -f -
+          
+          # Frontend build job with unique name using Git context
           cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1
         kind: Job
@@ -210,20 +233,35 @@ jobs:
           labels:
             test-run: "${{ github.run_id }}"
         spec:
+          backoffLimit: 1
+          activeDeadlineSeconds: 600
           template:
             spec:
               restartPolicy: Never
+              initContainers:
+              - name: prepare-dockerfile
+                image: busybox:latest
+                command: ['sh', '-c']
+                args:
+                  - |
+                    cp /dockerfile/Dockerfile /workspace/Dockerfile
+                volumeMounts:
+                - name: dockerfile
+                  mountPath: /dockerfile
+                - name: workspace
+                  mountPath: /workspace
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
                 args:
-                - --dockerfile=/workspace/docker/react.Dockerfile
-                - --context=/workspace
+                - --dockerfile=/workspace/Dockerfile
+                - --context=git://github.com/${{ github.repository }}.git#${{ github.sha }}
                 - --destination=speecher-frontend:test
                 - --cache=true
                 - --cache-ttl=24h
+                - --push=false
                 volumeMounts:
-                - name: build-context
+                - name: workspace
                   mountPath: /workspace
                 resources:
                   requests:
@@ -233,9 +271,11 @@ jobs:
                     memory: "2Gi"
                     cpu: "1000m"
               volumes:
-              - name: build-context
+              - name: dockerfile
                 configMap:
-                  name: build-context-${{ github.run_id }}
+                  name: dockerfile-frontend-${{ github.run_id }}
+              - name: workspace
+                emptyDir: {}
         EOF
           
           echo "⏳ Waiting for frontend build to complete..."
@@ -411,7 +451,7 @@ jobs:
         echo "🧹 Cleaning up test resources..."
         kubectl delete deployment mongodb-deploy-${{ github.run_id }} backend-deploy-${{ github.run_id }} -n github-runner --grace-period=30 || true
         kubectl delete service mongodb-service-${{ github.run_id }} backend-service-${{ github.run_id }} -n github-runner --grace-period=30 || true
-        kubectl delete configmap test-config-${{ github.run_id }} build-context-${{ github.run_id }} -n github-runner --grace-period=30 || true
+        kubectl delete configmap test-config-${{ github.run_id }} dockerfile-backend-${{ github.run_id }} dockerfile-frontend-${{ github.run_id }} -n github-runner --grace-period=30 || true
         kubectl delete job backend-build-${{ github.run_id }} frontend-build-${{ github.run_id }} -n github-runner --grace-period=30 || true
         
         echo "✅ Integration test completed"

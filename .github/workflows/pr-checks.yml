@@ -334,12 +334,16 @@ jobs:
           --namespace=github-runner || {
           echo "❌ Backend build failed"
           kubectl logs job/backend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --tail=50
+          kubectl delete configmap dockerfile-backend-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
           kubectl delete job backend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
-          kubectl delete configmap backend-build-context-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
           exit 1
         }
         
         echo "✅ Backend image built successfully with Kaniko"
+        
+        # Cleanup backend ConfigMap and job
+        kubectl delete configmap dockerfile-backend-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
+        kubectl delete job backend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
     
     - name: 🏗️ Build Frontend Container image with Kaniko
       run: |
@@ -401,6 +405,10 @@ jobs:
           }
           
           echo "✅ Frontend image built successfully with Kaniko"
+          
+          # Cleanup frontend ConfigMap and job
+          kubectl delete configmap dockerfile-frontend-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
+          kubectl delete job frontend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
         else
           echo "⚠️ Frontend Dockerfile not found, skipping frontend build"
         fi
@@ -451,8 +459,7 @@ jobs:
         
         # Cleanup test resources
         kubectl delete pod backend-test-pr-${{ github.event.pull_request.number }} --namespace=github-runner --grace-period=30 || true
-        kubectl delete job backend-build-pr-${{ github.event.pull_request.number }} frontend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --grace-period=30 || true
-        kubectl delete configmap backend-build-context-pr-${{ github.event.pull_request.number }} frontend-build-context-pr-${{ github.event.pull_request.number }} --namespace=github-runner --grace-period=30 || true
+        # Note: ConfigMaps and jobs are cleaned up immediately after each build step above
         
         echo "✅ Container build and test completed"
 
