@@ -178,43 +178,25 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: 🏗️ Build Frontend Container with Docker
+    - name: 📦 Build Frontend Application
+      run: |
+        echo "📦 Building frontend application..."
+        cd ${{ env.FRONTEND_DIR }}
+        npm ci
+        npm run build
+        echo "✅ Frontend build completed"
+      working-directory: ./
+    
+    - name: 🏗️ Build Frontend Container with Kaniko
       run: |
         echo "🏗️ Building frontend container for PR ${{ github.event.pull_request.number }}..."
         
-        # Check for existing Dockerfiles and build accordingly
-        if [ -f "docker/react.Dockerfile" ]; then
-          echo "📄 Using docker/react.Dockerfile"
-          DOCKERFILE_PATH="docker/react.Dockerfile"
-        elif [ -f "${{ env.FRONTEND_DIR }}/Dockerfile" ]; then
-          echo "📄 Using frontend directory Dockerfile"
-          DOCKERFILE_PATH="${{ env.FRONTEND_DIR }}/Dockerfile"
-        else
-          echo "ℹ️ No frontend Dockerfile found, creating minimal Nginx container..."
-          
-          # First, ensure frontend build exists
-          cd ${{ env.FRONTEND_DIR }}
-          npm run build || {
-            echo "❌ Frontend build failed"
-            exit 1
-          }
-          cd -
-          
-          # Create a simple Dockerfile for testing
-          cat > /tmp/frontend.Dockerfile << 'EOF'
-        FROM nginx:alpine
-        COPY src/react-frontend/build /usr/share/nginx/html
-        EXPOSE 80
-        CMD ["nginx", "-g", "daemon off;"]
-        EOF
-          
-          DOCKERFILE_PATH="/tmp/frontend.Dockerfile"
-        fi
+        # Use the simplified nginx Dockerfile for frontend
+        DOCKERFILE_PATH="docker/frontend-nginx.Dockerfile"
+        echo "📄 Using $DOCKERFILE_PATH"
         
         # Build with Kaniko in Kubernetes
         echo "🔨 Building container image with Kaniko..."
-        
-        # No need for ConfigMap - using Git clone in init container
         
         # Create Kaniko build job using Git context directly
         cat <<EOF | kubectl apply -f -
@@ -225,7 +207,7 @@ jobs:
           namespace: ${{ env.KUBE_NAMESPACE }}
         spec:
           backoffLimit: 2
-          activeDeadlineSeconds: 900
+          activeDeadlineSeconds: 600
           template:
             spec:
               restartPolicy: Never
@@ -235,17 +217,24 @@ jobs:
                 command: ['sh', '-c']
                 args:
                   - |
+                    echo "Cloning repository..."
                     git clone --depth 1 https://github.com/${{ github.repository }}.git /workspace/context
                     cd /workspace/context
                     git checkout ${{ github.sha }}
-                    if [ -f "$DOCKERFILE_PATH" ]; then
-                      cp "$DOCKERFILE_PATH" /workspace/Dockerfile
-                    else
-                      cp /workspace/context/docker/react.Dockerfile /workspace/Dockerfile 2>/dev/null || echo "No frontend Dockerfile found"
-                    fi
-                env:
-                - name: DOCKERFILE_PATH
-                  value: "${{ env.DOCKERFILE_PATH || 'docker/react.Dockerfile' }}"
+                    
+                    echo "Preparing build context..."
+                    # Copy the frontend-nginx Dockerfile
+                    cp docker/frontend-nginx.Dockerfile /workspace/Dockerfile
+                    
+                    # Build the frontend first
+                    apk add --no-cache nodejs npm
+                    cd src/react-frontend
+                    npm ci
+                    npm run build
+                    cd /workspace/context
+                    
+                    echo "Build context prepared"
+                    ls -la src/react-frontend/build/ | head -10
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
@@ -257,8 +246,8 @@ jobs:
                 - --context=dir:///workspace/context
                 - --destination=speecher-frontend:pr-${{ github.event.pull_request.number }}
                 - --no-push
-                - --verbosity=debug
-                - --build-arg=FRONTEND_DIR=${{ env.FRONTEND_DIR }}
+                - --cache=true
+                - --cache-ttl=24h
                 volumeMounts:
                 - name: workspace
                   mountPath: /workspace
@@ -269,10 +258,12 @@ jobs:
         
         # Wait for build
         kubectl wait --for=condition=complete job/kaniko-frontend-${{ github.run_id }} \
-          --timeout=900s \
+          --timeout=600s \
           --namespace=${{ env.KUBE_NAMESPACE }} || {
-          echo "❌ Kaniko build failed"
-          kubectl logs job/kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --tail=50
+          echo "❌ Kaniko build failed or timed out"
+          echo "📋 Fetching Kaniko logs..."
+          kubectl logs job/kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --all-containers=true --tail=100
+          kubectl delete job kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
           exit 1
         }
         
