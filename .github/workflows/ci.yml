@@ -134,7 +134,6 @@ jobs:
                   runAsUser: 1000
                   runAsNonRoot: true
                   allowPrivilegeEscalation: false
-                  readOnlyRootFilesystem: true
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest

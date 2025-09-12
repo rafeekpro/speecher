@@ -325,10 +325,9 @@ jobs:
                 - name: workspace
                   mountPath: /workspace
                 securityContext:
-                  runAsUser: 1000
-                  runAsNonRoot: true
+                  runAsUser: 0  # Git needs root to clone and write files
+                  runAsNonRoot: false
                   allowPrivilegeEscalation: false
-                  readOnlyRootFilesystem: true
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
@@ -549,10 +548,9 @@ jobs:
                 - name: workspace
                   mountPath: /workspace
                 securityContext:
-                  runAsUser: 1000
-                  runAsNonRoot: true
+                  runAsUser: 0  # Git needs root to clone and write files
+                  runAsNonRoot: false
                   allowPrivilegeEscalation: false
-                  readOnlyRootFilesystem: true
               containers:
               - name: kaniko
                 image: gcr.io/kaniko-project/executor:latest
