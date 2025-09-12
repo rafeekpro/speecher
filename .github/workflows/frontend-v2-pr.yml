@@ -218,6 +218,12 @@ jobs:
         # Build with Kaniko in Kubernetes
         echo "🔨 Building container image with Kaniko..."
         
+        # Clean up any existing Kaniko job and related ConfigMaps from previous runs
+        echo "🧹 Cleaning up any existing Kaniko resources..."
+        kubectl delete job kaniko-frontend-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
+        kubectl delete configmap kaniko-dockerfile-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
+        kubectl delete configmap kaniko-context-${{ github.run_id }} --namespace=${{ env.KUBE_NAMESPACE }} --ignore-not-found=true
+        
         # Create optimized Kaniko build job
         cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1

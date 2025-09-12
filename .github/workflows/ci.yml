@@ -89,6 +89,10 @@ jobs:
             --dry-run=client -o yaml | kubectl apply -f -
         fi
         
+        # Clean up any existing Kaniko build job from previous runs
+        echo "🧹 Cleaning up any existing Kaniko build job..."
+        kubectl delete job kaniko-build-${{ github.run_id }} --namespace=$NAMESPACE --ignore-not-found=true
+        
         # Optimized Kaniko build job using Git context directly
         cat <<EOF | kubectl apply -f -
         apiVersion: batch/v1

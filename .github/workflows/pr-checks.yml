@@ -283,6 +283,10 @@ jobs:
       run: |
         echo "🏗️ Building backend image with Kaniko for PR ${{ github.event.pull_request.number }}..."
         
+        # Clean up any existing job from previous runs
+        echo "🧹 Cleaning up any existing backend build job..."
+        kubectl delete job backend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
+        
         # No need for ConfigMap - using Git clone in init container
         
         # Backend build job with optimized Kaniko configuration
@@ -503,6 +507,10 @@ jobs:
         echo "🏗️ Building frontend image with Kaniko..."
         
         if [ -f "docker/react.Dockerfile" ]; then
+          # Clean up any existing job from previous runs
+          echo "🧹 Cleaning up any existing frontend build job..."
+          kubectl delete job frontend-build-pr-${{ github.event.pull_request.number }} --namespace=github-runner --ignore-not-found=true
+          
           # No need for ConfigMap - using Git clone in init container
           
           # Frontend build job with optimized Kaniko configuration

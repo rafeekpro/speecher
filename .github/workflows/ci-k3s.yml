@@ -137,6 +137,11 @@ jobs:
       run: |
         echo "🏗️ Setting up Kubernetes build environment for K3s..."
         
+        # Clean up any existing resources from previous runs
+        echo "🧹 Cleaning up any existing backend build resources..."
+        kubectl delete job backend-build-${{ github.run_id }} --namespace=github-runner --ignore-not-found=true
+        kubectl delete configmap dockerfile-backend-${{ github.run_id }} --namespace=github-runner --ignore-not-found=true
+        
         # Create small ConfigMap only for Dockerfile
         echo "📦 Creating Dockerfile ConfigMap..."
         kubectl create configmap dockerfile-backend-${{ github.run_id }} \
@@ -322,6 +327,11 @@ jobs:
         echo "🏗️ Building frontend image with Kaniko..."
         
         if [ -f "docker/react.Dockerfile" ]; then
+          # Clean up any existing resources from previous runs
+          echo "🧹 Cleaning up any existing frontend build resources..."
+          kubectl delete job frontend-build-${{ github.run_id }} --namespace=github-runner --ignore-not-found=true
+          kubectl delete configmap dockerfile-frontend-${{ github.run_id }} --namespace=github-runner --ignore-not-found=true
+          
           # Create frontend Dockerfile ConfigMap
           kubectl create configmap dockerfile-frontend-${{ github.run_id }} \
             --from-file=Dockerfile=./docker/react.Dockerfile \
@@ -670,6 +680,10 @@ jobs:
     - name: Container Security Scan with Trivy in Kubernetes
       run: |
         echo "🔒 Running container security scan with Trivy in K3s..."
+        
+        # Clean up any existing Trivy scan job from previous runs
+        echo "🧹 Cleaning up any existing Trivy scan job..."
+        kubectl delete job trivy-scan-${{ github.run_id }} --namespace=github-runner --ignore-not-found=true
         
         # Run Trivy scan as a Kubernetes job with optimized configuration
         cat <<EOF | kubectl apply -f -
